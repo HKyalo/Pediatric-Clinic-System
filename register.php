@@ -1,135 +1,528 @@
 <?php
-// register.php
-
 session_start();
+require_once __DIR__ . "/config/db.php";
 
-// Connect to MySQL
-$conn = new mysqli("localhost", "root", "", "PediaLink", 3307); // Port 3307 if changed in XAMPP
+// ============================================
+// HANDLE REGISTRATION FORM SUBMISSION
+// ============================================
+$error = '';
 
-// Check connection
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-
-$message = "";
-
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Guardian data
-    $guardian_name = $conn->real_escape_string($_POST['guardian_name']);
-    $guardian_email = $conn->real_escape_string($_POST['guardian_email']);
-    $guardian_phone = $conn->real_escape_string($_POST['guardian_phone']);
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
-
-    // Child data
-    $child_first_name = $conn->real_escape_string($_POST['child_first_name']);
-$child_last_name  = $conn->real_escape_string($_POST['child_last_name']);
-$child_dob        = $_POST['child_dob'];
-$child_gender     = $_POST['child_gender'];
-
-
-    // Check passwords match
-    if ($password !== $confirm_password) {
-        $message = "Passwords do not match!";
-    } else {
-        // Hash password
-        $password_hashed = password_hash($password, PASSWORD_DEFAULT);
-
-        // Insert guardian
-        $stmt = $conn->prepare("INSERT INTO guardians (name, email, phone, password) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("ssss", $guardian_name, $guardian_email, $guardian_phone, $password_hashed);
-
-        if ($stmt->execute()) {
-            $guardian_id = $stmt->insert_id; // Get the inserted guardian ID
-
-            // Insert child linked to guardian
-           $stmt2 = $conn->prepare(
-    "INSERT INTO children (guardian_id, first_name, last_name, gender, date_of_birth)
-     VALUES (?, ?, ?, ?, ?)"
-);
-
-$stmt2->bind_param(
-    "issss",
-    $guardian_id,
-    $child_first_name,
-    $child_last_name,
-    $child_gender,
-    $child_dob
-);
-
-            if ($stmt2->execute()) {
-                $message = "Registration successful! You can now <a href='index.php'>login</a>.";
-            } else {
-                $message = "Child registration failed: " . $stmt2->error;
-            }
-
-            $stmt2->close();
-        } else {
-            $message = "Guardian registration failed: " . $stmt->error;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    
+    if (empty($_POST['login_email'])) {
+        $error = "Please select which email to use for login";
+    } 
+    elseif (empty($_POST['password']) || empty($_POST['confirm_password'])) {
+        $error = "Please enter and confirm your password";
+    } 
+    elseif ($_POST['password'] !== $_POST['confirm_password']) {
+        $error = "Passwords do not match";
+    } 
+    elseif (strlen($_POST['password']) < 6) {
+        $error = "Password must be at least 6 characters long";
+    }
+    else {
+        
+        $login_type = $_POST['login_email'];
+        $login_email = null;
+        $login_name = null;
+        $login_phone = null;
+        
+        if ($login_type === 'mother' && !empty($_POST['mother_email'])) {
+            $login_email = $_POST['mother_email'];
+            $login_name = $_POST['mother_name'];
+            $login_phone = $_POST['mother_phone'];
+        } 
+        elseif ($login_type === 'father' && !empty($_POST['father_email'])) {
+            $login_email = $_POST['father_email'];
+            $login_name = $_POST['father_name'];
+            $login_phone = $_POST['father_phone'];
+        } 
+        elseif ($login_type === 'guardian' && !empty($_POST['guardian_email'])) {
+            $login_email = $_POST['guardian_email'];
+            $login_name = $_POST['guardian_name'];
+            $login_phone = $_POST['guardian_phone'];
         }
+        
+        if (!$login_email) {
+            $error = "Please provide an email for the selected login option";
+        } else {
+            
+            $check_query = $conn->prepare("SELECT id FROM guardians WHERE email = ?");
+            $check_query->bind_param("s", $login_email);
+            $check_query->execute();
+            
+            if ($check_query->get_result()->num_rows > 0) {
+                $error = "This email is already registered.";
+                $check_query->close();
+            } else {
+                $check_query->close();
+                
+                $hashed_password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+                
+               $insert_query = $conn->prepare("INSERT INTO guardians 
+    (name, email, password, 
+     mother_name, mother_email, mother_phone,
+     father_name, father_email, father_phone,
+     guardian_name, guardian_email, guardian_relationship, guardian_phone,
+     login_email_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-        $stmt->close();
+$insert_query->bind_param("ssssssssssssss",
+    $login_name, $login_email, $hashed_password,
+    $_POST['mother_name'], $_POST['mother_email'], $_POST['mother_phone'],
+    $_POST['father_name'], $_POST['father_email'], $_POST['father_phone'],
+    $_POST['guardian_name'], $_POST['guardian_email'], $_POST['guardian_relationship'], $_POST['guardian_phone'],
+    $login_type
+);
+                
+                if ($insert_query->execute()) {
+                    $guardian_id = $conn->insert_id;
+                    $insert_query->close();
+                    
+                    $_SESSION['guardian_id'] = $guardian_id;
+                    $_SESSION['guardian_name'] = $login_name;
+                    $_SESSION['guardian_email'] = $login_email;
+                    $_SESSION['user_type'] = 'guardian';
+                    
+                    header("Location: add_child.php?first_time=1");
+                    exit();
+                } else {
+                    $error = "Registration failed.";
+                }
+            }
+        }
     }
 }
-
-$conn->close();
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Strict//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Guardian Registration - PA-EHR System</title>
-<link rel="stylesheet" href="assets\css\style.css">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Register - PCASS</title>
+    <style>
+        /* ===== SIMPLE REGISTER PAGE STYLES ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #0b1a33;
+            padding: 40px;
+        }
+        
+        .register-box {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 20px rgba(11,26,51,0.1);
+        }
+        
+        /* Header - Dark Blue */
+        .header {
+            background: #0b1a33;
+            color: white;
+            padding: 30px 40px;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 5px;
+            color: white;
+        }
+        
+        .header p {
+            color: #a3c6ff;
+            font-size: 14px;
+        }
+        
+        /* Content Area */
+        .content {
+            padding: 40px;
+        }
+        
+        .content h2 {
+            color: #0b1a33;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .content .subtitle {
+            color: #5a6f8c;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        /* Three Column Grid */
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        /* Detail Cards */
+        .detail-card {
+            background: #f8fafd;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+        
+        .detail-card.mother {
+            border-left-color: #ec4899;
+        }
+        
+        .detail-card.father {
+            border-left-color: #3b82f6;
+        }
+        
+        .detail-card.guardian {
+            border-left-color: #f59e0b;
+        }
+        
+        .detail-card h3 {
+            color: #0b1a33;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #1e3a5f;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #0c1725;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border 0.2s;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #0b1a33;
+        }
+        
+        .form-group input::placeholder {
+            color: #7fa2da;
+            font-size: 13px;
+        }
+        
+        /* Login Selection Box */
+        .login-box {
+            background: #e6f0ff;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 30px 0;
+            border: 1px solid #b8d1ff;
+        }
+        
+        .login-box p {
+            font-weight: 700;
+            color: #0b1a33;
+            margin-bottom: 15px;
+            font-size: 15px;
+        }
+        
+        .login-box p span {
+            color: #ef4444;
+            margin-left: 3px;
+        }
+        
+        .radio-group {
+            display: flex;
+            gap: 30px;
+        }
+        
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .radio-item input[type="radio"] {
+            accent-color: #0b1a33;
+            width: 16px;
+            height: 16px;
+        }
+        
+        .radio-item label {
+            color: #1e293b;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        /* Password Box */
+        .password-box {
+            background: #f8fafd;
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 4px solid #10b981;
+            margin-bottom: 30px;
+        }
+        
+        .password-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        /* Button */
+        .btn-register {
+            background: #0b1a33;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+        }
+        
+        .btn-register:hover {
+            background: #1e3a5f;
+        }
+        
+        /* Login Link */
+        .login-link {
+            text-align: center;
+            margin-top: 20px;
+            color: #5a6f8c;
+            font-size: 14px;
+        }
+        
+        .login-link a {
+            color: #0b1a33;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Error Message */
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ef4444;
+            font-size: 14px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 900px) {
+            body {
+                padding: 20px;
+            }
+            
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            
+            .radio-group {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .password-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                padding: 20px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
 </head>
 <body>
-<header>
-  <div class="container header-container">
-    <h1 class="logo">PA-EHR System</h1>
-    <nav>
-      <a href="index.php">Home</a>
-    </nav>
-  </div>
-</header>
 
-<section class="registration">
-  <div class="container registration-content">
-    <div class="registration-card">
-      <h2>Guardian & Child Registration</h2>
-
-      <?php if($message != ""): ?>
-        <p style="color:red;"><?= $message ?></p>
-      <?php endif; ?>
-
-      <form action="" method="POST">
-        <h3>Guardian Details</h3>
-        <input type="text" name="guardian_name" placeholder="Full Name" required>
-        <input type="email" name="guardian_email" placeholder="Email Address" required>
-        <input type="tel" name="guardian_phone" placeholder="Phone Number" required>
-        <input type="password" name="password" placeholder="Password" required>
-        <input type="password" name="confirm_password" placeholder="Confirm Password" required>
-
-        <h3>Child Details</h3>
-        <input type="text" name="child_first_name" placeholder="Child First Name" required>
-        <input type="text" name="child_last_name" placeholder="Child Last Name" required>
-        <input type="date" name="child_dob" placeholder="Date of Birth" required>
-        <select name="child_gender" required>
-          <option value="">Select Gender</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-          <option value="Other">Other</option>
-        </select>
-
-        <button type="submit">Register</button>
-      </form>
-      <p class="login-link">Already registered? <a href="index.php">Login here</a></p>
+<div class="register-box">
+    
+    <!-- ===== HEADER ===== -->
+    <div class="header">
+        <h1>PCASS</h1>
+        <p>Pediatric Clinic Appointment Scheduling System</p>
     </div>
-  </div>
-</section>
+    
+    <!-- ===== MAIN CONTENT ===== -->
+    <div class="content">
+        
+        <h2>Create Account</h2>
+        <p class="subtitle">Register to access your child's health records</p>
+        
+        <!-- Error Message -->
+        <?php if (!empty($error)): ?>
+            <div class="error">⚠️ <?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+        
+        <form method="POST">
+            
+            <!-- Three Column Layout - Mother, Father, Guardian -->
+            <div class="grid-3">
+                
+                <!-- MOTHER -->
+                <div class="detail-card mother">
+                    <h3>MOTHER'S DETAILS</h3>
+                    
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" name="mother_name" 
+                               placeholder="eg: Anna Lee"
+                               value="<?= htmlspecialchars($_POST['mother_name'] ?? '') ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="mother_email" 
+                               placeholder="eg: anna@email.com"
+                               value="<?= htmlspecialchars($_POST['mother_email'] ?? '') ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="tel" name="mother_phone" 
+                               placeholder="eg: +254 719 345 678"
+                               value="<?= htmlspecialchars($_POST['mother_phone'] ?? '') ?>">
+                    </div>
+                </div>
+                
+                <!-- FATHER -->
+                <div class="detail-card father">
+                    <h3>FATHER'S DETAILS</h3>
+                    
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" name="father_name" 
+                               placeholder="eg: Peter John"
+                               value="<?= htmlspecialchars($_POST['father_name'] ?? '') ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="father_email" 
+                               placeholder="eg: peter@email.com"
+                               value="<?= htmlspecialchars($_POST['father_email'] ?? '') ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="tel" name="father_phone" 
+                               placeholder="eg: +254 719 345 678"
+                               value="<?= htmlspecialchars($_POST['father_phone'] ?? '') ?>">
+                    </div>
+                </div>
+                
+                <!-- GUARDIAN -->
+<div class="detail-card guardian">
+    <h3>GUARDIAN (if parents unavailable)</h3>
+    
+    <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" name="guardian_name" 
+               placeholder="eg: Sarah Zuri"
+               value="<?= htmlspecialchars($_POST['guardian_name'] ?? '') ?>">
+    </div>
+    
+    <!-- ADD THIS EMAIL FIELD -->
+    <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="guardian_email" 
+               placeholder="eg: sarah@email.com"
+               value="<?= htmlspecialchars($_POST['guardian_email'] ?? '') ?>">
+    </div>
+    
+    <div class="form-group">
+        <label>Relationship</label>
+        <input type="text" name="guardian_relationship" 
+               placeholder="eg: Aunt"
+               value="<?= htmlspecialchars($_POST['guardian_relationship'] ?? '') ?>">
+    </div>
+    
+    <div class="form-group">
+        <label>Phone Number</label>
+        <input type="tel" name="guardian_phone" 
+               placeholder="eg: +254 719 345 678"
+               value="<?= htmlspecialchars($_POST['guardian_phone'] ?? '') ?>">
+    </div>
+</div>
+            </div>
+            
+            <!-- LOGIN EMAIL SELECTION -->
+            <div class="login-box">
+                <p>Which email should be used for login? <span>*</span></p>
+                
+                <div class="radio-group">
+                    <div class="radio-item">
+                        <input type="radio" name="login_email" id="login_mother" value="mother" required>
+                        <label for="login_mother">Mother's email</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" name="login_email" id="login_father" value="father" required>
+                        <label for="login_father">Father's email</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" name="login_email" id="login_guardian" value="guardian" required>
+                        <label for="login_guardian">Guardian's email</label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PASSWORD SECTION -->
+            <div class="password-box">
+                <div class="password-grid">
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" name="password" 
+                               placeholder="********" required minlength="6">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Confirm Password</label>
+                        <input type="password" name="confirm_password" 
+                               placeholder="********" required minlength="6">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- SUBMIT BUTTON -->
+            <button type="submit" class="btn-register">CREATE ACCOUNT</button>
+            
+            <div class="login-link">
+                Already have an account? <a href="index.php">Log in here</a>
+            </div>
+        </form>
+    </div>
+</div>
 
-<footer>
-  &copy; 2026 PA-EHR System
-</footer>
 </body>
 </html>

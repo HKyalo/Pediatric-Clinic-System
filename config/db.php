@@ -2,7 +2,7 @@
 $host = "localhost";
 $user = "root";
 $password = "";
-$database = "PediaLink";
+$database = "pcass";
 $port = 3307; 
 
 $conn = new mysqli($host, $user, $password, $database, $port);
