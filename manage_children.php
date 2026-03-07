@@ -22,10 +22,9 @@ if (isset($_POST['add_child'])) {
     $last_name = $_POST['last_name'];
     $gender = $_POST['gender'];
     $date_of_birth = $_POST['date_of_birth'];
-    $blood_type = $_POST['blood_type'] ?? null;
     
-    $stmt = $conn->prepare("INSERT INTO children (guardian_id, first_name, last_name, gender, date_of_birth, blood_type) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("isssss", $guardian_id, $first_name, $last_name, $gender, $date_of_birth, $blood_type);
+    $stmt = $conn->prepare("INSERT INTO children (guardian_id, first_name, last_name, gender, date_of_birth) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("isssss", $guardian_id, $first_name, $last_name, $gender, $date_of_birth);
     
     if ($stmt->execute()) {
         $message = "Child added successfully!";
@@ -58,7 +57,7 @@ if (isset($_GET['delete'])) {
 // GET DATA
 // ============================================
 
-// Children with guardian info (removed phone reference)
+// Children with guardian info 
 $children = $conn->query("
     SELECT c.*, g.name as guardian_name, g.email as guardian_email
     FROM children c
@@ -477,10 +476,6 @@ $guardians = $conn->query("SELECT id, name, email FROM guardians ORDER BY name A
             <div class="stat-mini">
                 <span class="num"><?= $female ?></span>
                 <span class="label">Female</span>
-            </div>
-            <div class="stat-mini">
-                <span class="num">+<?= $new_this_month ?></span>
-                <span class="label">This Month</span>
             </div>
         </div>
         

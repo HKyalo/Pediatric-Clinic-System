@@ -96,14 +96,14 @@ if (isset($_POST['edit_guardian'])) {
     if (!empty($password)) {
         $pass = password_hash($password, PASSWORD_DEFAULT);
         $stmt = $conn->prepare("UPDATE guardians SET 
-            name=?, email=?, phone=?, password=?,
+            name=?, email=?, password=?,
             mother_name=?, mother_email=?, mother_phone=?,
             father_name=?, father_email=?, father_phone=?,
             guardian_name=?, guardian_email=?, guardian_relationship=?, guardian_phone=?,
             login_email_type=?
             WHERE id=?");
-        $stmt->bind_param("sssssssssssssssi", 
-            $name, $email, $phone, $pass,
+        $stmt->bind_param("ssssssssssssssi", 
+            $name, $email, $pass,
             $_POST['mother_name'], $_POST['mother_email'], $_POST['mother_phone'],
             $_POST['father_name'], $_POST['father_email'], $_POST['father_phone'],
             $_POST['guardian_name'], $_POST['guardian_email'], $_POST['guardian_relationship'], $_POST['guardian_phone'],

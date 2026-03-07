@@ -1,112 +1,152 @@
-// Sidebar toggle if needed (for future sliding menu)
-const sidebar = document.getElementById('sidebar');
+// ============================================
+// PCASS - Password Strength Validation
+// ============================================
 
-function toggleSidebar() {
-  sidebar.classList.toggle('collapsed');
+/**
+ * Checks password strength against security requirements
+ * Updates visual indicators in real-time
+ * 
+ * @param {string} password - The password to check
+ * @returns {object} - Validation results
+ */
+function checkPasswordStrength(password) {
+    // Define password requirements
+    const requirements = {
+        minLength: password.length >= 8,
+        hasUpper: /[A-Z]/.test(password),
+        hasLower: /[a-z]/.test(password),
+        hasNumber: /[0-9]/.test(password),
+        hasSpecial: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+    };
+    
+    // Update visual indicators if they exist on the page
+    if (document.getElementById('req-length')) {
+        document.getElementById('req-length').className = 
+            requirements.minLength ? 'strength-item valid' : 'strength-item invalid';
+        
+        document.getElementById('req-upper').className = 
+            requirements.hasUpper ? 'strength-item valid' : 'strength-item invalid';
+        
+        document.getElementById('req-lower').className = 
+            requirements.hasLower ? 'strength-item valid' : 'strength-item invalid';
+        
+        document.getElementById('req-number').className = 
+            requirements.hasNumber ? 'strength-item valid' : 'strength-item invalid';
+        
+        document.getElementById('req-special').className = 
+            requirements.hasSpecial ? 'strength-item valid' : 'strength-item invalid';
+    }
+    
+    // Determine if all requirements are met
+    const isValid = requirements.minLength && 
+                    requirements.hasUpper && 
+                    requirements.hasLower && 
+                    requirements.hasNumber && 
+                    requirements.hasSpecial;
+    
+    return {
+        isValid: isValid,
+        requirements: requirements
+    };
 }
-// ===== Appointments JS =====
-document.addEventListener('DOMContentLoaded', () => {
-  const appointmentForm = document.getElementById('book-appointment-form');
-  const tableBody = document.querySelector('.appointments-table tbody');
 
-  // Load existing appointments from localStorage or initialize
-  let appointments = JSON.parse(localStorage.getItem('appointments')) || [
-    {
-      date: '2026-01-20',
-      time: '10:00 AM',
-      doctor: 'Dr. Smith',
-      status: 'Confirmed'
-    },
-    {
-      date: '2026-02-10',
-      time: '09:00 AM',
-      doctor: 'Dr. Allen',
-      status: 'Pending'
+// ============================================
+
+/**
+ * Validates password on form submission
+ * Checks both strength requirements and password confirmation
+ * 
+ * @param {string} password - Password field value
+ * @param {string} confirm - Confirm password field value
+ * @returns {boolean} - True if valid, false otherwise
+ */
+function validatePassword(password, confirm) {
+    // Check password strength
+    const result = checkPasswordStrength(password);
+    
+    if (!result.isValid) {
+        alert(
+            'Password does not meet the strength requirements:\n\n' +
+            '• At least 8 characters\n' +
+            '• At least 1 uppercase letter (A-Z)\n' +
+            '• At least 1 lowercase letter (a-z)\n' +
+            '• At least 1 number (0-9)\n' +
+            '• At least 1 special character (!@#$%^&*)'
+        );
+        return false;
     }
-  ];
+    
+    // Check if passwords match
+    if (password !== confirm) {
+        alert('Passwords do not match!');
+        return false;
+    }
+    
+    return true;
+}
 
-  // Function to render appointments table
-  function renderAppointments() {
-    tableBody.innerHTML = '';
-    appointments.forEach((appt, index) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${appt.date}</td>
-        <td>${appt.time}</td>
-        <td>${appt.doctor}</td>
-        <td>${appt.status}</td>
-        <td>
-          <button class="reschedule-btn" data-index="${index}">Reschedule</button>
-          <button class="cancel-btn" data-index="${index}">Cancel</button>
-        </td>
-      `;
-      tableBody.appendChild(tr);
+// ============================================
+
+/**
+ * Initializes real-time password validation on a form
+ * Sets up event listeners for password field
+ * Optionally disables submit button until password is valid
+ * 
+ * @param {string} passwordId - ID of password input field
+ * @param {string} confirmId - ID of confirm password input field
+ * @param {string} submitId - ID of submit button (optional)
+ */
+function initPasswordValidation(passwordId, confirmId, submitId = null) {
+    // Get password field
+    const passwordField = document.getElementById(passwordId);
+    
+    if (!passwordField) {
+        console.warn('Password field not found:', passwordId);
+        return;
+    }
+    
+    // Add real-time validation on keyup
+    passwordField.addEventListener('keyup', function() {
+        checkPasswordStrength(this.value);
     });
-  }
-
-  // Initial render
-  renderAppointments();
-
-  // Handle booking new appointment
-  appointmentForm.addEventListener('submit', e => {
-    e.preventDefault();
-
-    const doctor = document.getElementById('doctor').value;
-    const clinic = document.getElementById('clinic').value; // optional for future
-    const date = document.getElementById('date').value;
-    const time = document.getElementById('time').value;
-
-    if (!doctor || !date || !time) return alert('Please fill all fields.');
-
-    appointments.push({
-      date,
-      time,
-      doctor,
-      status: 'Pending'
-    });
-
-    localStorage.setItem('appointments', JSON.stringify(appointments));
-    renderAppointments();
-    appointmentForm.reset();
-    alert('Appointment booked successfully!');
-  });
-
-  // Handle reschedule / cancel actions
-  tableBody.addEventListener('click', e => {
-    const index = e.target.dataset.index;
-    if (e.target.classList.contains('cancel-btn')) {
-      if (confirm('Are you sure you want to cancel this appointment?')) {
-        appointments.splice(index, 1);
-        localStorage.setItem('appointments', JSON.stringify(appointments));
-        renderAppointments();
-      }
+    
+    // Optionally disable submit button until password is valid
+    if (submitId) {
+        const submitBtn = document.getElementById(submitId);
+        
+        if (submitBtn) {
+            // Initially disable submit button
+            submitBtn.disabled = true;
+            
+            // Enable/disable based on password strength
+            passwordField.addEventListener('keyup', function() {
+                const result = checkPasswordStrength(this.value);
+                submitBtn.disabled = !result.isValid;
+            });
+        }
     }
-    if (e.target.classList.contains('reschedule-btn')) {
-      const newDate = prompt('Enter new date (YYYY-MM-DD):', appointments[index].date);
-      const newTime = prompt('Enter new time (HH:MM AM/PM):', appointments[index].time);
-      if (newDate && newTime) {
-        appointments[index].date = newDate;
-        appointments[index].time = newTime;
-        appointments[index].status = 'Pending'; // mark as pending after reschedule
-        localStorage.setItem('appointments', JSON.stringify(appointments));
-        renderAppointments();
-        alert('Appointment rescheduled successfully!');
-      }
+}
+
+// ============================================
+
+/**
+ * Simple password match validation
+ * Checks if password and confirm password fields match
+ * 
+ * @param {string} passwordId - ID of password field
+ * @param {string} confirmId - ID of confirm password field
+ * @returns {boolean} - True if passwords match
+ */
+function passwordsMatch(passwordId, confirmId) {
+    const password = document.getElementById(passwordId).value;
+    const confirm = document.getElementById(confirmId).value;
+    
+    if (password !== confirm) {
+        alert('Passwords do not match!');
+        return false;
     }
-  });
-});
-document.getElementById("loginForm").addEventListener("submit", function(e){
-  e.preventDefault();
+    
+    return true;
+}
 
-  const role = document.getElementById("role").value;
-
-  if (role === "guardian") {
-    window.location.href = "child_dashboard.html";
-  }
-  else if (role === "doctor") {
-    window.location.href = "doctor_dashboard.html";
-  }
-  else if (role === "admin") {
-    window.location.href = "admin_dashboard.html";
-  }
-});
+// ============================================

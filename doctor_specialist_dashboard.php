@@ -132,7 +132,7 @@ $recent_count = $recent->num_rows;
         <?php if ($flagged->num_rows > 0): ?>
         <div class="card">
             <div class="card-header">
-                <h2>🚨 Flagged for Review</h2>
+                <h2>Flagged for Review</h2>
             </div>
             <?php while ($f = $flagged->fetch_assoc()): 
                 $age = floor((time() - strtotime($f['date_of_birth'])) / (365 * 24 * 60 * 60));
@@ -181,7 +181,7 @@ $recent_count = $recent->num_rows;
         <?php if ($recent->num_rows > 0): ?>
         <div class="card">
             <div class="card-header">
-                <h2>📋 Recently Reviewed</h2>
+                <h2>Recently Reviewed</h2>
             </div>
             <?php while ($r = $recent->fetch_assoc()): 
                 $age = floor((time() - strtotime($r['date_of_birth'])) / (365 * 24 * 60 * 60));

@@ -171,7 +171,7 @@ $children = $conn->query("
 // Get all doctors for dropdown
 $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specialization FROM doctors WHERE status = 'Active' ORDER BY full_name");
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Strict//EN">
+<!DOCTYPE html>
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -629,35 +629,6 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
             color: #0b1a33;
         }
         
-        /* Info Box */
-        .info-box {
-            background: #fff3cd;
-            padding: 20px 24px;
-            border-left: 4px solid #ffc107;
-            border-radius: 0 4px 4px 0;
-        }
-        
-        .info-box h3 {
-            color: #856404;
-            font-size: 15px;
-            font-weight: 700;
-            margin-bottom: 12px;
-        }
-        
-        .info-box p {
-            color: #856404;
-            font-size: 13px;
-            margin-bottom: 5px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .info-box p:before {
-            content: "•";
-            font-weight: 700;
-            font-size: 16px;
-        }
     </style>
 </head>
 <body>
@@ -961,17 +932,6 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
             </div>
         </div>
         <?php endif; ?>
-        
-        <!-- Information Box -->
-        <div class="info-box">
-            <h3>Appointment Management</h3>
-            <p>Schedule new appointments for any guardian/child</p>
-            <p><strong>Pending:</strong> Confirm, Cancel, Reschedule, or Delete</p>
-            <p><strong>Confirmed:</strong> Complete, Cancel, Reschedule, or Delete</p>
-            <p><strong>Completed/Cancelled:</strong> No actions available</p>
-            <p>Guardian/Parent column shows the relationship (Mother/Father/Guardian)</p>
-        </div>
-        
     </div>
 </div>
 </body>

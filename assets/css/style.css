@@ -741,7 +741,7 @@ body {
     font-weight: 600;
 }
 
-/* Form Styles */
+/* ===== FORM STYLES (including password strength) ===== */
 .form-group {
     margin-bottom: 15px;
 }
@@ -779,6 +779,77 @@ textarea.form-control {
     resize: vertical;
 }
 
+/* Password Strength Indicator */
+.password-strength {
+    margin-top: 15px;
+    margin-bottom: 15px;
+    padding: 15px;
+    background: #f8fafd;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+.strength-item {
+    color: #5a6f8c;
+    margin: 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    transition: color 0.2s ease;
+}
+
+/* Valid state - green */
+.strength-item.valid {
+    color: #10b981;
+}
+
+/* Invalid state - red */
+.strength-item.invalid {
+    color: #ef4444;
+}
+
+/* Indicator circles */
+.strength-item span {
+    font-size: 14px;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+/* Valid checkmark */
+.strength-item.valid span::before {
+    content: "✓";
+}
+
+/* Invalid circle */
+.strength-item.invalid span::before {
+    content: "○";
+}
+
+/* Password hint text */
+.password-hint {
+    font-size: 11px;
+    color: #5a6f8c;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
+    font-style: italic;
+}
+
+/* Disabled submit button */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+button:disabled:hover {
+    background: #0b1a33; /* Keep same color, don't change on hover */
+}
+
 .security-warning {
     background: #fff3cd;
     color: #856404;
@@ -787,6 +858,34 @@ textarea.form-control {
     font-size: 14px;
     margin-bottom: 20px;
     border-left: 4px solid #ffc107;
+}
+
+/* ===== MINIMAL READ-ONLY STYLES ===== */
+.readonly-field {
+    background: #f8fafd !important;
+    border: 1px solid #e2e8f0 !important;
+    cursor: default;
+}
+
+.readonly-note {
+    font-size: 12px;
+    color: #5a6f8c;
+    margin-top: 10px;
+    font-style: italic;
+    padding-left: 5px;
+}
+
+.info-box {
+    background: #e8f4fd;
+    border-left: 4px solid #3498db;
+    padding: 15px 20px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.info-box p {
+    margin: 5px 0;
+    color: #2c3e50;
 }
 
 /* Buttons */
@@ -810,6 +909,16 @@ textarea.form-control {
 
 .btn-primary:hover {
     background: #1e3a5f;
+}
+
+.btn-primary:disabled {
+    background: #5a6f8c;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-primary:disabled:hover {
+    background: #5a6f8c;
 }
 
 .btn-secondary {
@@ -854,32 +963,4 @@ textarea.form-control {
     .patients-grid {
         grid-template-columns: 1fr;
     }
-}
-
-/* ===== MINIMAL READ-ONLY STYLES ===== */
-.readonly-field {
-    background: #f8fafd !important;
-    border: 1px solid #e2e8f0 !important;
-    cursor: default;
-}
-
-.readonly-note {
-    font-size: 12px;
-    color: #5a6f8c;
-    margin-top: 10px;
-    font-style: italic;
-    padding-left: 5px;
-}
-
-.info-box {
-    background: #e8f4fd;
-    border-left: 4px solid #3498db;
-    padding: 15px 20px;
-    border-radius: 4px;
-    margin-bottom: 20px;
-}
-
-.info-box p {
-    margin: 5px 0;
-    color: #2c3e50;
 }

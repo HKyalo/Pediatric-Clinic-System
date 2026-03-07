@@ -491,7 +491,7 @@ if ($child_id) {
                 <!-- NEXT APPOINTMENT ROW -->
                 <div class="info-row">
                     <div class="info-content">
-                        <span class="info-icon">📅</span>
+                        <span class="info-icon"></span>
                         <div class="info-text">
                             <span class="info-title">Next Appointment</span>
                             <?php if ($next_appointment): ?>
@@ -512,7 +512,7 @@ if ($child_id) {
                 <!-- NEXT VACCINE ROW -->
                 <div class="info-row">
                     <div class="info-content">
-                        <span class="info-icon">💉</span>
+                        <span class="info-icon"></span>
                         <div class="info-text">
                             <span class="info-title">Next Vaccine</span>
                             <?php if ($next_vaccine): ?>

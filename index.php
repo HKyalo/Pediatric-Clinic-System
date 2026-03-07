@@ -313,7 +313,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
 
 <div class="top-bar">
-    <a href="index.php">Login</a>
     <a href="register.php">Register</a>
 </div>
 

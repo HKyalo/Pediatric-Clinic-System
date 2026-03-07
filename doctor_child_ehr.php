@@ -323,7 +323,7 @@ foreach ($milestone_data as $num => $data) {
                     Age: <?= $age_years ?>y <?= $age_remaining_months ?>m • DOB: <?= $child['date_of_birth'] ?> • <?= $age_weeks ?> weeks
                 </div>
             </div>
-            <a href="doctor_flag.php?child_id=<?= $child_id ?>" class="flag-btn">🚩 Flag for Review</a>
+            <a href="doctor_flag.php?child_id=<?= $child_id ?>" class="flag-btn">Flag for Review</a>
         </div>
         
         <?php if (isset($message)): ?>
@@ -332,8 +332,8 @@ foreach ($milestone_data as $num => $data) {
         
         <!-- Tabs -->
         <div class="tabs">
-            <a href="?child_id=<?= $child_id ?>&tab=growth" class="tab <?= $active_tab == 'growth' ? 'active' : '' ?>">📊 Growth & Vaccines</a>
-            <a href="?child_id=<?= $child_id ?>&tab=development" class="tab <?= $active_tab == 'development' ? 'active' : '' ?>">🧠 Development</a>
+            <a href="?child_id=<?= $child_id ?>&tab=growth" class="tab <?= $active_tab == 'growth' ? 'active' : '' ?>">Growth & Vaccines</a>
+            <a href="?child_id=<?= $child_id ?>&tab=development" class="tab <?= $active_tab == 'development' ? 'active' : '' ?>">Development</a>
         </div>
         
         <!-- ==================== TAB 1: GROWTH & VACCINES ==================== -->
@@ -341,7 +341,7 @@ foreach ($milestone_data as $num => $data) {
             
             <!-- Vitals -->
             <div class="section">
-                <div class="section-header"><h2>📏 Record Vitals</h2></div>
+                <div class="section-header"><h2>Record Vitals</h2></div>
                 <form method="POST">
                     <div class="grid-3">
                         <div class="form-group"><label>Weight (kg) *</label><input type="number" step="0.1" name="weight_kg" class="form-control" required></div>
@@ -355,7 +355,7 @@ foreach ($milestone_data as $num => $data) {
             
             <!-- Growth Charts -->
             <div class="section">
-                <div class="section-header"><h2>📈 Growth Charts</h2></div>
+                <div class="section-header"><h2>Growth Charts</h2></div>
                 <div class="grid-2">
                     <div><h3 style="margin-bottom:15px;">Weight-for-Age</h3><div class="chart-container"><canvas id="weightChart"></canvas></div></div>
                     <div><h3 style="margin-bottom:15px;">Height-for-Age</h3><div class="chart-container"><canvas id="heightChart"></canvas></div></div>
@@ -364,7 +364,7 @@ foreach ($milestone_data as $num => $data) {
             
             <!-- Vaccines -->
             <div class="section">
-                <div class="section-header"><h2>💉 Vaccines</h2></div>
+                <div class="section-header"><h2>Vaccines</h2></div>
                 
                 <?php if (!empty($due_vaccines)): ?>
                 <div style="margin-bottom:30px;">
@@ -406,7 +406,7 @@ foreach ($milestone_data as $num => $data) {
                 
                 <?php if ($completed_vaccines->num_rows > 0): ?>
                 <div style="margin-bottom:30px;">
-                    <h3 style="color:#0b1a33; margin-bottom:15px;">✅ Completed Vaccines</h3>
+                    <h3 style="color:#0b1a33; margin-bottom:15px;">Completed Vaccines</h3>
                     <table>
                         <thead><tr><th>Date</th><th>Vaccine</th><th>Dose</th></tr></thead>
                         <tbody>
@@ -424,7 +424,7 @@ foreach ($milestone_data as $num => $data) {
                 
                 <?php if (!empty($upcoming_vaccines)): ?>
                 <div>
-                    <h3 style="color:#0b1a33; margin-bottom:15px;">📅 Upcoming Vaccines</h3>
+                    <h3 style="color:#0b1a33; margin-bottom:15px;">Upcoming Vaccines</h3>
                     <table>
                         <thead><tr><th>Vaccine</th><th>Dose</th><th>Due Age</th><th>Est. Date</th></tr></thead>
                         <tbody>
@@ -446,7 +446,7 @@ foreach ($milestone_data as $num => $data) {
             
             <!-- Growth History -->
             <div class="section">
-                <div class="section-header"><h2>📋 Growth History</h2></div>
+                <div class="section-header"><h2>Growth History</h2></div>
                 <?php if ($growth_history->num_rows > 0): ?>
                 <table>
                     <thead><tr><th>Date</th><th>Weight</th><th>Height</th><th>Head</th><th>Notes</th></tr></thead>
@@ -472,7 +472,7 @@ foreach ($milestone_data as $num => $data) {
             <!-- Milestones -->
             <div class="section">
                 <div class="section-header">
-                    <h2>🧠 Developmental Milestones</h2>
+                    <h2>Developmental Milestones</h2>
                     <p style="color:#5a6f8c;">Check off milestones as achieved</p>
                 </div>
                 <form method="POST">
@@ -513,7 +513,7 @@ foreach ($milestone_data as $num => $data) {
             <!-- Delay Alerts -->
             <?php if (!empty($delays)): ?>
             <div class="delay-box">
-                <h3 style="color:#991b1b; margin-bottom:10px;">⚠️ Potential Delays Detected</h3>
+                <h3 style="color:#991b1b; margin-bottom:10px;">Potential Delays Detected</h3>
                 <ul style="color:#991b1b; margin-left:20px;">
                     <?php foreach ($delays as $d): ?><li><?= $d ?></li><?php endforeach; ?>
                 </ul>
@@ -523,7 +523,7 @@ foreach ($milestone_data as $num => $data) {
             
             <!-- Teeth -->
             <div class="section">
-                <div class="section-header"><h2>🦷 Teeth Development</h2></div>
+                <div class="section-header"><h2>Teeth Development</h2></div>
                 <form method="POST">
                     <div class="grid-4">
                         <?php 

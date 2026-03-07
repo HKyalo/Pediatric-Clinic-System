@@ -119,10 +119,10 @@ while ($vax = $all_vaccines->fetch_assoc()) {
     
     if ($age_weeks >= $vax['min_age_weeks']) {
         $status = 'overdue';
-        $status_text = '🔴 Overdue';
+        $status_text = 'Overdue';
     } else {
         $status = 'upcoming';
-        $status_text = '🟡 Upcoming';
+        $status_text = 'Upcoming';
     }
     
     $upcoming_vaccines[] = [
@@ -280,7 +280,7 @@ foreach ($milestone_data as $num => $data) {
     <div class="sidebar">
         <div class="sidebar-header">
             <h2>PCASS</h2>
-            <p>Family Portal</p>
+            <p>Child and Guardian Portal</p>
         </div>
         <div class="nav">
             <ul>
@@ -314,7 +314,7 @@ foreach ($milestone_data as $num => $data) {
         <!-- Specialist Assessments -->
         <div class="card">
             <div class="card-header">
-                <h3>🏥 Specialist Assessments</h3>
+                <h3>Specialist Assessments</h3>
                 <span class="count"><?= $visits->num_rows ?></span>
             </div>
             <div class="card-body">
@@ -379,7 +379,7 @@ foreach ($milestone_data as $num => $data) {
                             <!-- Lab Orders -->
                             <?php if ($v['lab_orders']): ?>
                             <div class="assessment-section">
-                                <strong>🔬 Lab Tests Ordered:</strong>
+                                <strong>Lab Tests Ordered:</strong>
                                 <p style="margin-top:5px; white-space:pre-line; background:#f8fafd; padding:8px; border-radius:4px;">
                                     <?= nl2br(htmlspecialchars($v['lab_orders'])) ?>
                                 </p>
@@ -389,7 +389,7 @@ foreach ($milestone_data as $num => $data) {
                             <!-- Lab Results -->
                             <?php if ($review_labs->num_rows > 0): ?>
                             <div class="assessment-section">
-                                <strong>📊 Lab Results:</strong>
+                                <strong>Lab Results:</strong>
                                 <?php while ($lab = $review_labs->fetch_assoc()): ?>
                                 <div class="lab-item">
                                     <div style="display:flex; justify-content:space-between;">
@@ -404,7 +404,7 @@ foreach ($milestone_data as $num => $data) {
                                     <?php endif; ?>
                                     <?php if (!empty($lab['attachment'])): ?>
                                     <div style="margin-top:5px;">
-                                        <a href="<?= htmlspecialchars($lab['attachment']) ?>" class="download-link" download>⬇ Download Report</a>
+                                        <a href="<?= htmlspecialchars($lab['attachment']) ?>" class="download-link" download>Download Report</a>
                                     </div>
                                     <?php endif; ?>
                                 </div>
@@ -415,7 +415,7 @@ foreach ($milestone_data as $num => $data) {
                             <!-- Prescriptions -->
                             <?php if ($review_prescriptions->num_rows > 0): ?>
                             <div class="assessment-section">
-                                <strong>💊 Prescriptions:</strong>
+                                <strong>Prescriptions:</strong>
                                 <?php while ($p = $review_prescriptions->fetch_assoc()): ?>
                                 <div class="med-item">
                                     <div style="display:flex; justify-content:space-between;">
@@ -438,7 +438,7 @@ foreach ($milestone_data as $num => $data) {
                             <!-- Referrals -->
                             <?php if ($v['referrals']): ?>
                             <div class="assessment-section">
-                                <strong>📋 Referrals:</strong>
+                                <strong>Referrals:</strong>
                                 <p style="margin-top:5px; background:#f8fafd; padding:8px; border-radius:4px;">
                                     <?= nl2br(htmlspecialchars($v['referrals'])) ?>
                                 </p>
@@ -448,7 +448,7 @@ foreach ($milestone_data as $num => $data) {
                             <!-- Follow-up -->
                             <?php if ($v['follow_up_date']): ?>
                             <div class="assessment-section">
-                                <strong>📅 Follow-up Appointment:</strong>
+                                <strong>Follow-up Appointment:</strong>
                                 <p style="margin-top:5px; background:#f0fdf4; padding:8px; border-left:4px solid #10b981;">
                                     <?= date('l, F j, Y', strtotime($v['follow_up_date'])) ?>
                                 </p>
@@ -464,12 +464,12 @@ foreach ($milestone_data as $num => $data) {
         <!-- Vaccinations -->
         <div class="card">
             <div class="card-header">
-                <h3>💉 Vaccination Records</h3>
+                <h3>Vaccination Records</h3>
                 <span class="count"><?= $vaccines->num_rows ?> given</span>
             </div>
             <div class="card-body">
                 <!-- Completed Vaccines -->
-                <div class="section-title">✅ Completed Vaccines</div>
+                <div class="section-title">Completed Vaccines</div>
                 <?php if ($vaccines->num_rows == 0): ?>
                     <div class="empty">No vaccines recorded yet</div>
                 <?php else: ?>
@@ -498,7 +498,7 @@ foreach ($milestone_data as $num => $data) {
                 <!-- Upcoming Vaccines -->
                 <?php if (!empty($upcoming_vaccines)): ?>
                 <div class="section-divider"></div>
-                <div class="section-title">📅 Upcoming Vaccines</div>
+                <div class="section-title">Upcoming Vaccines</div>
                 <table>
                     <thead>
                         <tr>
@@ -538,7 +538,7 @@ foreach ($milestone_data as $num => $data) {
         <?php if ($growth_chart->num_rows > 0): ?>
         <div class="card">
             <div class="card-header">
-                <h3>📊 Growth Charts</h3>
+                <h3>Growth Charts</h3>
             </div>
             <div class="card-body">
                 <div class="grid-2">
@@ -579,7 +579,7 @@ foreach ($milestone_data as $num => $data) {
         <!-- Growth Records Table -->
         <div class="card">
             <div class="card-header">
-                <h3>📈 Growth Records</h3>
+                <h3>Growth Records</h3>
                 <span class="count"><?= $growth->num_rows ?></span>
             </div>
             <div class="card-body">
@@ -615,7 +615,7 @@ foreach ($milestone_data as $num => $data) {
         <!-- Milestones -->
         <div class="card">
             <div class="card-header">
-                <h3>🧠 Developmental Milestones</h3>
+                <h3>Developmental Milestones</h3>
                 <span class="count"><?= count($milestone_map) ?> of <?= count($milestone_data) ?> achieved</span>
             </div>
             <div class="card-body">
@@ -638,11 +638,11 @@ foreach ($milestone_data as $num => $data) {
                             <td><?= $data['expected_range'] ?></td>
                             <td>
                                 <?php if ($achieved): ?>
-                                    <span class="badge achieved">✓ Achieved</span>
+                                    <span class="badge achieved">Achieved</span>
                                 <?php elseif ($is_delayed): ?>
-                                    <span class="badge delay">⚠️ Delayed</span>
+                                    <span class="badge delay">Delayed</span>
                                 <?php else: ?>
-                                    <span class="badge pending">○ Pending</span>
+                                    <span class="badge pending">Pending</span>
                                 <?php endif; ?>
                             </td>
                             <td>
@@ -658,7 +658,7 @@ foreach ($milestone_data as $num => $data) {
         <!-- Teeth -->
         <div class="card">
             <div class="card-header">
-                <h3>🦷 Teeth Development</h3>
+                <h3>Teeth Development</h3>
                 <span class="count"><?= $teeth->num_rows ?> emerged</span>
             </div>
             <div class="card-body">
@@ -682,7 +682,7 @@ foreach ($milestone_data as $num => $data) {
         <?php if ($labs->num_rows > 0): ?>
         <div class="card">
             <div class="card-header">
-                <h3>🔬 Lab Results</h3>
+                <h3>Lab Results</h3>
                 <span class="count"><?= $labs->num_rows ?></span>
             </div>
             <div class="card-body">

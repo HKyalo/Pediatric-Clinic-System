@@ -18,8 +18,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($_POST['password'] !== $_POST['confirm_password']) {
         $error = "Passwords do not match";
     } 
-    elseif (strlen($_POST['password']) < 6) {
-        $error = "Password must be at least 6 characters long";
+    // UPDATED: Password strength validation
+    elseif (strlen($_POST['password']) < 8) {
+        $error = "Password must be at least 8 characters long";
+    }
+    elseif (!preg_match('/[A-Z]/', $_POST['password'])) {
+        $error = "Password must contain at least one uppercase letter";
+    }
+    elseif (!preg_match('/[a-z]/', $_POST['password'])) {
+        $error = "Password must contain at least one lowercase letter";
+    }
+    elseif (!preg_match('/[0-9]/', $_POST['password'])) {
+        $error = "Password must contain at least one number";
+    }
+    elseif (!preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/', $_POST['password'])) {
+        $error = "Password must contain at least one special character (!@#$%^&*)";
     }
     else {
         
@@ -100,6 +113,8 @@ $insert_query->bind_param("ssssssssssssss",
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <title>Register - PCASS</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <script src="assets/js/script.js"></script>
     <style>
         /* ===== SIMPLE REGISTER PAGE STYLES ===== */
         * {
@@ -288,6 +303,70 @@ $insert_query->bind_param("ssssssssssssss",
             gap: 20px;
         }
         
+        /* Password Strength Styles (added inline for completeness) */
+        .password-strength {
+            margin-top: 15px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #ffffff;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .strength-item {
+            color: #5a6f8c;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            transition: color 0.2s ease;
+        }
+        
+        .strength-item.valid {
+            color: #10b981;
+        }
+        
+        .strength-item.invalid {
+            color: #ef4444;
+        }
+        
+        .strength-item span {
+            font-size: 14px;
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .strength-item.valid span::before {
+            content: "✓";
+        }
+        
+        .strength-item.invalid span::before {
+            content: "○";
+        }
+        
+        .password-hint {
+            font-size: 11px;
+            color: #5a6f8c;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            font-style: italic;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        button:disabled:hover {
+            background: #0b1a33;
+        }
+        
         /* Button */
         .btn-register {
             background: #0b1a33;
@@ -304,6 +383,16 @@ $insert_query->bind_param("ssssssssssssss",
         
         .btn-register:hover {
             background: #1e3a5f;
+        }
+        
+        .btn-register:disabled {
+            background: #5a6f8c;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn-register:disabled:hover {
+            background: #5a6f8c;
         }
         
         /* Login Link */
@@ -385,7 +474,10 @@ $insert_query->bind_param("ssssssssssssss",
             <div class="error">⚠️ <?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
         
-        <form method="POST">
+        <form method="POST" onsubmit="return validatePassword(
+            document.getElementById('password').value,
+            document.getElementById('confirm_password').value
+        )">
             
             <!-- Three Column Layout - Mother, Father, Guardian -->
             <div class="grid-3">
@@ -443,38 +535,37 @@ $insert_query->bind_param("ssssssssssssss",
                 </div>
                 
                 <!-- GUARDIAN -->
-<div class="detail-card guardian">
-    <h3>GUARDIAN (if parents unavailable)</h3>
-    
-    <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" name="guardian_name" 
-               placeholder="eg: Sarah Zuri"
-               value="<?= htmlspecialchars($_POST['guardian_name'] ?? '') ?>">
-    </div>
-    
-    <!-- ADD THIS EMAIL FIELD -->
-    <div class="form-group">
-        <label>Email</label>
-        <input type="email" name="guardian_email" 
-               placeholder="eg: sarah@email.com"
-               value="<?= htmlspecialchars($_POST['guardian_email'] ?? '') ?>">
-    </div>
-    
-    <div class="form-group">
-        <label>Relationship</label>
-        <input type="text" name="guardian_relationship" 
-               placeholder="eg: Aunt"
-               value="<?= htmlspecialchars($_POST['guardian_relationship'] ?? '') ?>">
-    </div>
-    
-    <div class="form-group">
-        <label>Phone Number</label>
-        <input type="tel" name="guardian_phone" 
-               placeholder="eg: +254 719 345 678"
-               value="<?= htmlspecialchars($_POST['guardian_phone'] ?? '') ?>">
-    </div>
-</div>
+                <div class="detail-card guardian">
+                    <h3>GUARDIAN (if parents unavailable)</h3>
+                    
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" name="guardian_name" 
+                               placeholder="eg: Sarah Zuri"
+                               value="<?= htmlspecialchars($_POST['guardian_name'] ?? '') ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" name="guardian_email" 
+                               placeholder="eg: sarah@email.com"
+                               value="<?= htmlspecialchars($_POST['guardian_email'] ?? '') ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Relationship</label>
+                        <input type="text" name="guardian_relationship" 
+                               placeholder="eg: Aunt"
+                               value="<?= htmlspecialchars($_POST['guardian_relationship'] ?? '') ?>">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="tel" name="guardian_phone" 
+                               placeholder="eg: +254 719 345 678"
+                               value="<?= htmlspecialchars($_POST['guardian_phone'] ?? '') ?>">
+                    </div>
+                </div>
             </div>
             
             <!-- LOGIN EMAIL SELECTION -->
@@ -502,20 +593,43 @@ $insert_query->bind_param("ssssssssssssss",
                 <div class="password-grid">
                     <div class="form-group">
                         <label>Password</label>
-                        <input type="password" name="password" 
-                               placeholder="********" required minlength="6">
+                        <input type="password" name="password" id="password"
+                               placeholder="********" required minlength="8"
+                               onkeyup="checkPasswordStrength(this.value)">
                     </div>
                     
                     <div class="form-group">
                         <label>Confirm Password</label>
-                        <input type="password" name="confirm_password" 
-                               placeholder="********" required minlength="6">
+                        <input type="password" name="confirm_password" id="confirm_password"
+                               placeholder="********" required minlength="8">
+                    </div>
+                </div>
+                
+                <!-- Password Strength Indicator -->
+                <div class="password-strength">
+                    <div id="req-length" class="strength-item invalid">
+                        <span></span> At least 8 characters
+                    </div>
+                    <div id="req-upper" class="strength-item invalid">
+                        <span></span> At least 1 uppercase letter (A-Z)
+                    </div>
+                    <div id="req-lower" class="strength-item invalid">
+                        <span></span> At least 1 lowercase letter (a-z)
+                    </div>
+                    <div id="req-number" class="strength-item invalid">
+                        <span></span> At least 1 number (0-9)
+                    </div>
+                    <div id="req-special" class="strength-item invalid">
+                        <span></span> At least 1 special character (!@#$%^&*)
+                    </div>
+                    <div class="password-hint">
+                        Use a strong password with a mix of characters
                     </div>
                 </div>
             </div>
             
             <!-- SUBMIT BUTTON -->
-            <button type="submit" class="btn-register">CREATE ACCOUNT</button>
+            <button type="submit" id="register-btn" class="btn-register" disabled>CREATE ACCOUNT</button>
             
             <div class="login-link">
                 Already have an account? <a href="index.php">Log in here</a>
@@ -523,6 +637,63 @@ $insert_query->bind_param("ssssssssssssss",
         </form>
     </div>
 </div>
+
+<script>
+// Initialize password validation when page loads
+window.addEventListener('DOMContentLoaded', function() {
+    // Check if our script.js functions are available
+    if (typeof initPasswordValidation === 'function') {
+        initPasswordValidation('password', 'confirm_password', 'register-btn');
+    } else {
+        console.warn('Password validation functions not loaded. Make sure script.js is included.');
+        
+        // Fallback: enable button anyway
+        document.getElementById('register-btn').disabled = false;
+    }
+});
+
+// Manual validation as backup
+document.querySelector('form').addEventListener('submit', function(e) {
+    const password = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm_password').value;
+    
+    if (password.length < 8) {
+        e.preventDefault();
+        alert('Password must be at least 8 characters long');
+        return false;
+    }
+    
+    if (!/[A-Z]/.test(password)) {
+        e.preventDefault();
+        alert('Password must contain at least one uppercase letter');
+        return false;
+    }
+    
+    if (!/[a-z]/.test(password)) {
+        e.preventDefault();
+        alert('Password must contain at least one lowercase letter');
+        return false;
+    }
+    
+    if (!/[0-9]/.test(password)) {
+        e.preventDefault();
+        alert('Password must contain at least one number');
+        return false;
+    }
+    
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+        e.preventDefault();
+        alert('Password must contain at least one special character (!@#$%^&*)');
+        return false;
+    }
+    
+    if (password !== confirm) {
+        e.preventDefault();
+        alert('Passwords do not match!');
+        return false;
+    }
+});
+</script>
 
 </body>
 </html>

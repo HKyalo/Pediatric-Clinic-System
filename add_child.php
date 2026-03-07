@@ -26,18 +26,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         
         $insert_query = $conn->prepare("INSERT INTO children 
-            (guardian_id, first_name, last_name, date_of_birth, gender, blood_type)
-            VALUES (?, ?, ?, ?, ?, ?)");
+            (guardian_id, first_name, last_name, date_of_birth, gender)
+            VALUES (?, ?, ?, ?, ?)");
         
-        $blood_type = !empty($_POST['blood_type']) ? $_POST['blood_type'] : null;
-        
-        $insert_query->bind_param("isssss",
+        $insert_query->bind_param("issss",
             $guardian_id,
             $_POST['first_name'],
             $_POST['last_name'],
             $_POST['date_of_birth'],
             $_POST['gender'],
-            $blood_type
         );
         
         if ($insert_query->execute()) {
@@ -306,9 +303,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <!-- Welcome Message (only for first child) -->
         <?php if ($is_first_child): ?>
             <div class="welcome-box">
-                <div class="welcome-icon">👋</div>
-                <h2>Welcome back!</h2>
-                <p>Welcome to PCASS! Let's add your first child's information</p>
+                <h2>Welcome!</h2>
+                <p>Let's add your first child's information</p>
             </div>
         <?php else: ?>
             <div class="form-title">Add Another Child</div>
@@ -356,11 +352,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <option value="female" <?= (($_POST['gender'] ?? '') === 'female') ? 'selected' : '' ?>>Female</option>
                     </select>
                 </div>
-            </div>
-            
-            <!-- Note -->
-            <div class="note-box">
-                <i>ℹ️</i> Allergies and medical conditions will be added by your doctor in the EHR system.
             </div>
             
             <!-- Submit Button -->

@@ -52,7 +52,7 @@ if (isset($_POST['update_contacts'])) {
 }
 
 // ============================================
-// HANDLE PASSWORD CHANGE
+// HANDLE PASSWORD CHANGE - UPDATED WITH STRENGTH VALIDATION
 // ============================================
 if (isset($_POST['change_password'])) {
     
@@ -63,34 +63,52 @@ if (isset($_POST['change_password'])) {
     $current_hash = $password_query->get_result()->fetch_assoc()['password'];
     $password_query->close();
     
+    $new_password = $_POST['new_password'];
+    $confirm_password = $_POST['confirm_password'];
+    
     // Verify current password
     if (password_verify($_POST['current_password'], $current_hash)) {
         
-        // Check new password validity
-        if ($_POST['new_password'] === $_POST['confirm_password']) {
-            
-            if (strlen($_POST['new_password']) >= 6) {
-                
-                $new_hash = password_hash($_POST['new_password'], PASSWORD_DEFAULT);
-                $update_query = $conn->prepare("UPDATE guardians SET password = ? WHERE id = ?");
-                $update_query->bind_param("si", $new_hash, $guardian_id);
-                
-                if ($update_query->execute()) {
-                    $message = "Password changed successfully!";
-                    $message_type = "success";
-                } else {
-                    $message = "Error changing password.";
-                    $message_type = "error";
-                }
-                $update_query->close();
-                
-            } else {
-                $message = "Password must be at least 6 characters long.";
-                $message_type = "error";
-            }
-        } else {
+        // Check password strength
+        if (strlen($new_password) < 8) {
+            $message = "Password must be at least 8 characters long.";
+            $message_type = "error";
+        }
+        elseif (!preg_match('/[A-Z]/', $new_password)) {
+            $message = "Password must contain at least one uppercase letter.";
+            $message_type = "error";
+        }
+        elseif (!preg_match('/[a-z]/', $new_password)) {
+            $message = "Password must contain at least one lowercase letter.";
+            $message_type = "error";
+        }
+        elseif (!preg_match('/[0-9]/', $new_password)) {
+            $message = "Password must contain at least one number.";
+            $message_type = "error";
+        }
+        elseif (!preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/', $new_password)) {
+            $message = "Password must contain at least one special character (!@#$%^&*).";
+            $message_type = "error";
+        }
+        // Check if passwords match
+        elseif ($new_password !== $confirm_password) {
             $message = "New passwords do not match.";
             $message_type = "error";
+        }
+        else {
+            // All checks passed, update password
+            $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+            $update_query = $conn->prepare("UPDATE guardians SET password = ? WHERE id = ?");
+            $update_query->bind_param("si", $new_hash, $guardian_id);
+            
+            if ($update_query->execute()) {
+                $message = "Password changed successfully!";
+                $message_type = "success";
+            } else {
+                $message = "Error changing password.";
+                $message_type = "error";
+            }
+            $update_query->close();
         }
     } else {
         $message = "Current password is incorrect.";
@@ -148,6 +166,7 @@ $children_query = $conn->query("
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <title>Profile - PCASS</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <script src="assets/js/script.js"></script>
     <style>
         /* ===== PROFILE PAGE STYLES ===== */
         * {
@@ -293,6 +312,76 @@ $children_query = $conn->query("
             border-color: #0b1a33;
         }
         
+        /* Password Strength Styles */
+        .password-strength {
+            margin-top: 15px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8fafd;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .strength-item {
+            color: #5a6f8c;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            transition: color 0.2s ease;
+        }
+        
+        .strength-item.valid {
+            color: #10b981;
+        }
+        
+        .strength-item.invalid {
+            color: #ef4444;
+        }
+        
+        .strength-item span {
+            font-size: 14px;
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .strength-item.valid span::before {
+            content: "✓";
+        }
+        
+        .strength-item.invalid span::before {
+            content: "○";
+        }
+        
+        .password-hint {
+            font-size: 11px;
+            color: #5a6f8c;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            font-style: italic;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-primary:disabled {
+            background: #5a6f8c;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn-primary:disabled:hover {
+            background: #5a6f8c;
+        }
+        
         /* Buttons */
         .btn {
             padding: 10px 20px;
@@ -427,7 +516,7 @@ $children_query = $conn->query("
     <div class="main">
         
         <div class="page-header">
-            <h1>👤 My Profile</h1>
+            <h1>My Profile</h1>
         </div>
         
         <!-- Message Display -->
@@ -524,7 +613,7 @@ $children_query = $conn->query("
                     <?php endif; ?>
                     
                     <button type="submit" name="update_contacts" class="btn btn-primary">
-                        💾 Save Contact Information
+                        Save Contact Information
                     </button>
                 </form>
             </div>
@@ -540,23 +629,49 @@ $children_query = $conn->query("
             </div>
             
             <div id="password-form" class="toggle-form">
-                <form method="POST">
+                <form method="POST" onsubmit="return validatePassword(
+                    document.getElementById('new_password').value,
+                    document.getElementById('confirm_password').value
+                )">
                     <div class="form-group">
                         <label>Current Password</label>
-                        <input type="password" name="current_password" class="form-control" required>
+                        <input type="password" name="current_password" id="current_password" class="form-control" required>
                     </div>
                     
                     <div class="form-group">
-                        <label>New Password (minimum 6 characters)</label>
-                        <input type="password" name="new_password" class="form-control" required minlength="6">
+                        <label>New Password</label>
+                        <input type="password" name="new_password" id="new_password" class="form-control" 
+                               required minlength="8" onkeyup="checkPasswordStrength(this.value)">
                     </div>
                     
                     <div class="form-group">
                         <label>Confirm New Password</label>
-                        <input type="password" name="confirm_password" class="form-control" required minlength="6">
+                        <input type="password" name="confirm_password" id="confirm_password" class="form-control" required minlength="8">
                     </div>
                     
-                    <button type="submit" name="change_password" class="btn btn-primary">
+                    <!-- Password Strength Indicator -->
+                    <div class="password-strength">
+                        <div id="req-length" class="strength-item invalid">
+                            <span></span> At least 8 characters
+                        </div>
+                        <div id="req-upper" class="strength-item invalid">
+                            <span></span> At least 1 uppercase letter (A-Z)
+                        </div>
+                        <div id="req-lower" class="strength-item invalid">
+                            <span></span> At least 1 lowercase letter (a-z)
+                        </div>
+                        <div id="req-number" class="strength-item invalid">
+                            <span></span> At least 1 number (0-9)
+                        </div>
+                        <div id="req-special" class="strength-item invalid">
+                            <span></span> At least 1 special character (!@#$%^&*)
+                        </div>
+                        <div class="password-hint">
+                            Use a strong password with a mix of characters
+                        </div>
+                    </div>
+                    
+                    <button type="submit" name="change_password" id="password-btn" class="btn btn-primary" disabled>
                         Update Password
                     </button>
                 </form>
@@ -632,6 +747,25 @@ $children_query = $conn->query("
 function toggleForm(formId) {
     document.getElementById(formId).classList.toggle('show');
 }
+
+// Initialize password validation when page loads
+window.addEventListener('DOMContentLoaded', function() {
+    // Only initialize if the password fields exist
+    if (document.getElementById('new_password')) {
+        // Check if our script.js functions are available
+        if (typeof initPasswordValidation === 'function') {
+            initPasswordValidation('new_password', 'confirm_password', 'password-btn');
+        } else {
+            console.warn('Password validation functions not loaded. Make sure script.js is included.');
+            
+            // Fallback: enable button anyway
+            const passwordBtn = document.getElementById('password-btn');
+            if (passwordBtn) {
+                passwordBtn.disabled = false;
+            }
+        }
+    }
+});
 </script>
 
 </body>

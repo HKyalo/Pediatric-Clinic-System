@@ -424,11 +424,11 @@ while ($row = $status_stats->fetch_assoc()) {
                 <h1>System Reports</h1>
                 <p>Analytics and insights for <?= date('F Y') ?></p>
             </div>
-            <button class="print-btn" onclick="window.print()">🖨️ Print Report</button>
+            <button class="print-btn" onclick="window.print()">Print Report</button>
         </div>
         
         <!-- ========== PATIENT REPORTS ========== -->
-        <div class="section-title">👶 Patient Demographics</div>
+        <div class="section-title">Patient Demographics</div>
         
         <!-- Stats Row -->
         <div class="grid-4">
@@ -487,7 +487,7 @@ while ($row = $status_stats->fetch_assoc()) {
         </div>
         
         <!-- ========== APPOINTMENT REPORTS ========== -->
-        <div class="section-title">📅 Appointment Analytics</div>
+        <div class="section-title">Appointment Analytics</div>
         
         <div class="grid-4">
             <div class="stat-mini">
@@ -533,7 +533,7 @@ while ($row = $status_stats->fetch_assoc()) {
         </div>
         
         <!-- ========== DOCTOR REPORTS ========== -->
-        <div class="section-title">👨‍⚕️ Doctor Analytics</div>
+        <div class="section-title">Doctor Analytics</div>
         
         <div class="grid-3">
             <div class="stat-mini">
@@ -585,7 +585,7 @@ while ($row = $status_stats->fetch_assoc()) {
         </div>
         
         <!-- ========== FLAG REPORTS ========== -->
-        <div class="section-title">🚩 Flags for Specialist Review</div>
+        <div class="section-title">Flags for Specialist Review</div>
         
         <div class="grid-3">
             <div class="stat-mini">

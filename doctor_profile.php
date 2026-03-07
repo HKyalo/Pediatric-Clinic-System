@@ -18,7 +18,7 @@ $CLINIC_OPEN_TIME = "07:00";
 $CLINIC_CLOSE_TIME = "18:00";
 
 // ============================================
-// HANDLE PASSWORD CHANGE (ONLY editable thing)
+// HANDLE PASSWORD CHANGE - UPDATED WITH STRENGTH VALIDATION
 // ============================================
 if (isset($_POST['change_password'])) {
     $current = $_POST['current_password'];
@@ -32,11 +32,30 @@ if (isset($_POST['change_password'])) {
     if (!password_verify($current, $hash)) {
         $message = "Current password is incorrect.";
         $msg_type = "error";
-    } elseif ($new !== $confirm) {
-        $message = "New passwords do not match.";
+    }
+    // Password strength validation
+    elseif (strlen($new) < 8) {
+        $message = "Password must be at least 8 characters long.";
         $msg_type = "error";
-    } elseif (strlen($new) < 6) {
-        $message = "Password must be at least 6 characters.";
+    }
+    elseif (!preg_match('/[A-Z]/', $new)) {
+        $message = "Password must contain at least one uppercase letter.";
+        $msg_type = "error";
+    }
+    elseif (!preg_match('/[a-z]/', $new)) {
+        $message = "Password must contain at least one lowercase letter.";
+        $msg_type = "error";
+    }
+    elseif (!preg_match('/[0-9]/', $new)) {
+        $message = "Password must contain at least one number.";
+        $msg_type = "error";
+    }
+    elseif (!preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/', $new)) {
+        $message = "Password must contain at least one special character (!@#$%^&*).";
+        $msg_type = "error";
+    }
+    elseif ($new !== $confirm) {
+        $message = "New passwords do not match.";
         $msg_type = "error";
     } else {
         $new_hash = password_hash($new, PASSWORD_DEFAULT);
@@ -107,6 +126,7 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
     <meta charset="UTF-8">
     <title>Doctor Profile - PCASS</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <script src="assets/js/script.js"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { background:#f0f4fc; font-family:Arial; }
@@ -210,6 +230,76 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
             border-radius: 4px;
         }
         
+        /* Password Strength Styles */
+        .password-strength {
+            margin-top: 15px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8fafd;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .strength-item {
+            color: #5a6f8c;
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            transition: color 0.2s ease;
+        }
+        
+        .strength-item.valid {
+            color: #10b981;
+        }
+        
+        .strength-item.invalid {
+            color: #ef4444;
+        }
+        
+        .strength-item span {
+            font-size: 14px;
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .strength-item.valid span::before {
+            content: "✓";
+        }
+        
+        .strength-item.invalid span::before {
+            content: "○";
+        }
+        
+        .password-hint {
+            font-size: 11px;
+            color: #5a6f8c;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            font-style: italic;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn:disabled {
+            background: #5a6f8c;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn:disabled:hover {
+            background: #5a6f8c;
+        }
+        
         .btn {
             background: #0b1a33;
             color: white;
@@ -228,6 +318,8 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
             background: #dc3545;
             padding: 5px 10px;
             font-size: 12px;
+            text-decoration: none;
+            display: inline-block;
         }
         
         table {
@@ -295,7 +387,7 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
                 <li><a href="<?= $doctor['doctor_role'] == 'specialist' ? 'doctor_specialist_dashboard.php' : 'doctor_immunization_dashboard.php' ?>">Dashboard</a></li>
                 <li><a href="<?= $doctor['doctor_role'] == 'specialist' ? 'doctor_specialist_appointments.php' : 'doctor_immunization_appointments.php' ?>">My Appointments</a></li>
                 <li><a href="<?= $doctor['doctor_role'] == 'specialist' ? 'doctor_specialist_patients.php' : 'doctor_immunization_patients.php' ?>">My Patients</a></li>
-                <li><a href="doctor_profile.php" class="active">Profile & Settings</a></li>
+                <li><a href="doctor_profile.php" class="active">Profile</a></li>
                 <li><a href="logout.php">Logout</a></li>
             </ul>
         </div>
@@ -381,24 +473,55 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
         </div>
         <?php endif; ?>
         
-        <!-- Password Tab (CAN EDIT) -->
+        <!-- Password Tab (CAN EDIT) - UPDATED WITH STRENGTH VALIDATION -->
         <?php if ($active_tab == 'password'): ?>
         <div class="card">
             <h2>Change Password</h2>
-            <form method="POST">
+            <form method="POST" onsubmit="return validatePassword(
+                document.getElementById('new_password').value,
+                document.getElementById('confirm_password').value
+            )">
                 <div class="form-group">
                     <label>Current Password</label>
-                    <input type="password" name="current_password" class="form-control" required>
+                    <input type="password" name="current_password" id="current_password" class="form-control" required>
                 </div>
+                
                 <div class="form-group">
-                    <label>New Password (min. 6 characters)</label>
-                    <input type="password" name="new_password" class="form-control" required minlength="6">
+                    <label>New Password</label>
+                    <input type="password" name="new_password" id="new_password" class="form-control" 
+                           required minlength="8" onkeyup="checkPasswordStrength(this.value)">
                 </div>
+                
                 <div class="form-group">
                     <label>Confirm New Password</label>
-                    <input type="password" name="confirm_password" class="form-control" required minlength="6">
+                    <input type="password" name="confirm_password" id="confirm_password" class="form-control" required minlength="8">
                 </div>
-                <button type="submit" name="change_password" class="btn">Update Password</button>
+                
+                <!-- Password Strength Indicator -->
+                <div class="password-strength">
+                    <div id="req-length" class="strength-item invalid">
+                        <span></span> At least 8 characters
+                    </div>
+                    <div id="req-upper" class="strength-item invalid">
+                        <span></span> At least 1 uppercase letter (A-Z)
+                    </div>
+                    <div id="req-lower" class="strength-item invalid">
+                        <span></span> At least 1 lowercase letter (a-z)
+                    </div>
+                    <div id="req-number" class="strength-item invalid">
+                        <span></span> At least 1 number (0-9)
+                    </div>
+                    <div id="req-special" class="strength-item invalid">
+                        <span></span> At least 1 special character (!@#$%^&*)
+                    </div>
+                    <div class="password-hint">
+                        Use a strong password with a mix of characters
+                    </div>
+                </div>
+                
+                <button type="submit" name="change_password" id="password-btn" class="btn" disabled>
+                    Update Password
+                </button>
             </form>
         </div>
         <?php endif; ?>
@@ -425,7 +548,7 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
                 </div>
                 <div class="form-group">
                     <label>Reason (optional)</label>
-                    <input type="text" name="reason" class="form-control" placeholder="e.g., Lunch break, Conference, Personal time">
+                    <input type="text" name="reason" class="form-control" placeholder="e.g., Staff meeting, Conference, Personal">
                 </div>
                 <button type="submit" name="block_slot" class="btn btn-success">Block This Slot</button>
             </form>
@@ -450,7 +573,7 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
                             <td><?= date('g:i A', strtotime($b['block_time'])) ?></td>
                             <td><?= htmlspecialchars($b['reason'] ?: '-') ?></td>
                             <td>
-                                <a href="?tab=blocks&unblock=<?= $b['block_id'] ?>" class="btn btn-danger" style="padding:5px 10px; color:white; text-decoration:none;" onclick="return confirm('Unblock this slot?')">Unblock</a>
+                                <a href="?tab=blocks&unblock=<?= $b['block_id'] ?>" class="btn-danger" style="padding:5px 10px; color:white; text-decoration:none;" onclick="return confirm('Unblock this slot?')">Unblock</a>
                             </td>
                         </tr>
                         <?php endwhile; ?>
@@ -464,6 +587,28 @@ $blocked = $conn->query("SELECT * FROM blocked_slots WHERE doctor_id = $doctor_i
         
     </div>
 </div>
+
+<script>
+// Initialize password validation when page loads
+window.addEventListener('DOMContentLoaded', function() {
+    // Only initialize if on password tab and fields exist
+    if (document.getElementById('new_password')) {
+        // Check if our script.js functions are available
+        if (typeof initPasswordValidation === 'function') {
+            initPasswordValidation('new_password', 'confirm_password', 'password-btn');
+        } else {
+            console.warn('Password validation functions not loaded. Make sure script.js is included.');
+            
+            // Fallback: enable button anyway
+            const passwordBtn = document.getElementById('password-btn');
+            if (passwordBtn) {
+                passwordBtn.disabled = false;
+            }
+        }
+    }
+});
+</script>
+
 </body>
 </html>
 <?php $conn->close(); ?>

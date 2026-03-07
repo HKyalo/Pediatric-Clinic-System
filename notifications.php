@@ -24,7 +24,6 @@ $verify_child = $conn->prepare("SELECT child_id FROM children WHERE child_id = ?
 $verify_child->bind_param("ii", $selected_child_id, $guardian_id);
 $verify_child->execute();
 if ($verify_child->get_result()->num_rows == 0) {
-    // Invalid child selection, clear session and redirect
     unset($_SESSION['selected_child_id']);
     header("Location: select_child.php");
     exit();
@@ -33,13 +32,11 @@ $verify_child->close();
 
 // ============================================
 // AUTO-CREATE NOTIFICATIONS FOR UPCOMING APPOINTMENTS
-// (Only for the selected child)
 // ============================================
 
 $today = date('Y-m-d');
-$two_days = date('Y-m-d', strtotime('+2 days'));
+$three_days = date('Y-m-d', strtotime('+3 days'));
 
-// Find upcoming appointments for the selected child only
 $appointments_query = "
     SELECT 
         a.appointment_id,
@@ -57,7 +54,7 @@ $appointments_query = "
     WHERE c.guardian_id = $guardian_id
     AND a.child_id = $selected_child_id
     AND a.status IN ('Pending', 'Confirmed')
-    AND a.appointment_date BETWEEN '$today' AND '$two_days'
+    AND a.appointment_date BETWEEN '$today' AND '$three_days'
 ";
 
 $appointments = $conn->query($appointments_query);
@@ -65,26 +62,21 @@ $appointments = $conn->query($appointments_query);
 if ($appointments && $appointments->num_rows > 0) {
     while ($apt = $appointments->fetch_assoc()) {
         $days = $apt['days_until'];
-        
-        // Set doctor icon based on role
-        $doctor_icon = ($apt['doctor_role'] == 'specialist') ? '👨‍⚕️' : '💉';
         $doctor_type = ($apt['doctor_role'] == 'specialist') ? 'Specialist' : 'Immunization';
         
-        // Set notification title based on how soon
         if ($days == 0) {
-            $title = "🔴 TODAY: Appointment with {$doctor_type} Doctor";
+            $title = "Today: Appointment with {$doctor_type} Doctor";
         } elseif ($days == 1) {
-            $title = "🟡 TOMORROW: Appointment with {$doctor_type} Doctor";
+            $title = "Tomorrow: Appointment with {$doctor_type} Doctor";
         } else {
-            $title = "📅 In {$days} Days: Appointment with {$doctor_type} Doctor";
+            $title = "In {$days} Days: Appointment with {$doctor_type} Doctor";
         }
         
         $message = $apt['child_first_name'] . " has an appointment with Dr. " . 
-                   $apt['doctor_name'] . " " . $doctor_icon . " on " . 
+                   $apt['doctor_name'] . " on " . 
                    date('l, F j, Y', strtotime($apt['appointment_date'])) . " at " . 
                    date('g:i A', strtotime($apt['appointment_time']));
         
-        // Check if notification already exists for this appointment today
         $check_query = "
             SELECT notification_id 
             FROM notifications 
@@ -92,7 +84,6 @@ if ($appointments && $appointments->num_rows > 0) {
             AND child_id = $selected_child_id
             AND related_id = {$apt['appointment_id']}
             AND notification_type = 'appointment_reminder'
-            AND DATE(created_at) = CURDATE()
         ";
         $check = $conn->query($check_query);
         
@@ -118,25 +109,31 @@ if ($appointments && $appointments->num_rows > 0) {
 if (isset($_GET['mark_read'])) {
     $notif_id = intval($_GET['mark_read']);
     $conn->query("UPDATE notifications SET is_read = 1 WHERE notification_id = $notif_id AND guardian_id = $guardian_id AND child_id = $selected_child_id");
-    header("Location: notifications.php");
+    header("Location: notifications.php" . (isset($_GET['filter']) ? "?filter=" . $_GET['filter'] : ""));
     exit();
 }
 
 if (isset($_GET['mark_all'])) {
     $conn->query("UPDATE notifications SET is_read = 1 WHERE guardian_id = $guardian_id AND child_id = $selected_child_id AND is_read = 0");
-    header("Location: notifications.php");
+    header("Location: notifications.php" . (isset($_GET['filter']) ? "?filter=" . $_GET['filter'] : ""));
     exit();
 }
 
 if (isset($_GET['delete'])) {
     $notif_id = intval($_GET['delete']);
     $conn->query("DELETE FROM notifications WHERE notification_id = $notif_id AND guardian_id = $guardian_id AND child_id = $selected_child_id");
-    header("Location: notifications.php");
+    header("Location: notifications.php" . (isset($_GET['filter']) ? "?filter=" . $_GET['filter'] : ""));
+    exit();
+}
+
+if (isset($_GET['delete_all_read'])) {
+    $conn->query("DELETE FROM notifications WHERE guardian_id = $guardian_id AND child_id = $selected_child_id AND is_read = 1");
+    header("Location: notifications.php" . (isset($_GET['filter']) ? "?filter=" . $_GET['filter'] : ""));
     exit();
 }
 
 // ============================================
-// GET CHILD INFO FOR DISPLAY
+// GET CHILD INFO
 // ============================================
 $child_info = $conn->query("
     SELECT first_name, last_name 
@@ -145,18 +142,27 @@ $child_info = $conn->query("
 ")->fetch_assoc();
 
 // ============================================
-// GET ALL NOTIFICATIONS (Only for selected child)
+// GET NOTIFICATIONS WITH FILTER
 // ============================================
+
+$filter = $_GET['filter'] ?? 'all';
+$type_filter = "";
+if ($filter == 'unread') {
+    $type_filter = "AND is_read = 0";
+}
 
 $notifications_query = "
     SELECT * FROM notifications 
     WHERE guardian_id = $guardian_id 
     AND child_id = $selected_child_id
-    ORDER BY is_read ASC, created_at DESC
+    $type_filter
+    ORDER BY 
+        CASE WHEN is_read = 0 THEN 0 ELSE 1 END,
+        created_at DESC
 ";
 $notifications = $conn->query($notifications_query);
 
-// Count unread notifications for selected child
+// Count unread notifications
 $unread_result = $conn->query("
     SELECT COUNT(*) as count 
     FROM notifications 
@@ -198,28 +204,26 @@ $unread_count = $unread_result->fetch_assoc()['count'];
         
         .page-header {
             margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
         }
         
         .page-header h1 {
             color: #0b1a33;
             font-size: 28px;
-            margin-bottom: 5px;
         }
         
-        .page-header p {
-            color: #5a6f8c;
-            font-size: 14px;
-        }
-        
-        .child-indicator {
+        .child-badge {
             background: white;
-            padding: 10px 20px;
+            padding: 8px 16px;
+            border-radius: 4px;
             border-left: 4px solid #0b1a33;
-            display: inline-block;
-            margin-bottom: 20px;
             font-weight: 600;
         }
         
+        /* Stats Cards - Keeping these as they look nice */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -229,11 +233,10 @@ $unread_count = $unread_result->fetch_assoc()['count'];
         
         .stat-card {
             background: white;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(11,26,51,0.1);
-            text-align: center;
+            padding: 20px 25px;
+            border-radius: 4px;
             border-left: 4px solid #0b1a33;
+            box-shadow: 0 2px 8px rgba(11,26,51,0.08);
         }
         
         .stat-card.unread {
@@ -242,81 +245,131 @@ $unread_count = $unread_result->fetch_assoc()['count'];
         }
         
         .stat-number {
-            font-size: 32px;
+            font-size: 36px;
             font-weight: 700;
             color: #0b1a33;
-            margin-bottom: 5px;
+            line-height: 1.2;
         }
         
         .stat-label {
             color: #5a6f8c;
             font-size: 13px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
-        .action-bar {
+        .filter-tabs {
+            display: flex;
+            gap: 10px;
             margin-bottom: 20px;
         }
         
-        .btn-mark-all {
-            background: #0b1a33;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 6px;
+        .filter-tab {
+            padding: 8px 16px;
+            border-radius: 4px;
+            background: white;
+            color: #5a6f8c;
             text-decoration: none;
-            display: inline-block;
+            font-size: 13px;
             font-weight: 600;
-            font-size: 14px;
+            border: 1px solid #e2e8f0;
         }
         
-        .btn-mark-all:hover {
+        .filter-tab:hover {
+            background: #e6f0ff;
+        }
+        
+        .filter-tab.active {
+            background: #0b1a33;
+            color: white;
+            border-color: #0b1a33;
+        }
+        
+        .action-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 13px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: #0b1a33;
+            color: white;
+        }
+        
+        .btn-primary:hover {
             background: #1e3a5f;
+        }
+        
+        .btn-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .btn-danger:hover {
+            background: #fecaca;
         }
         
         .card {
             background: white;
-            border-radius: 8px;
-            padding: 25px;
-            box-shadow: 0 2px 10px rgba(11,26,51,0.1);
+            border-radius: 4px;
             border-left: 4px solid #0b1a33;
+            overflow: hidden;
         }
         
-        .card h2 {
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: #f8fafd;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .card-header h2 {
             color: #0b1a33;
-            font-size: 20px;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e2e8f0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .badge {
+            background: #0b1a33;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
         }
         
         .notification-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+            list-style: none;
         }
         
         .notification-item {
-            background: #f8fafd;
-            border-radius: 8px;
             padding: 20px;
-            border-left: 4px solid #94a3b8;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .notification-item:hover {
+            background: #f8fafd;
         }
         
         .notification-item.unread {
             background: #eff6ff;
-            border-left-color: #3b82f6;
-        }
-        
-        .notification-item.urgent {
-            border-left-color: #dc2626;
-            background: #fee2e2;
         }
         
         .notification-header {
             display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
         }
         
         .notification-title {
@@ -325,38 +378,20 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             font-size: 16px;
         }
         
-        .new-badge {
+        .unread-dot {
+            width: 8px;
+            height: 8px;
             background: #3b82f6;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
-            font-weight: 700;
-        }
-        
-        .doctor-badge {
+            border-radius: 50%;
             display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
-            font-weight: 600;
-            margin-left: 8px;
         }
         
-        .doctor-immunization {
-            background: #e6f0ff;
-            color: #0b1a33;
-        }
-        
-        .doctor-specialist {
-            background: #f3e8ff;
-            color: #6b21a8;
-        }
-        
-        .notification-time {
+        .notification-meta {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
             font-size: 12px;
             color: #5a6f8c;
-            margin-bottom: 10px;
         }
         
         .notification-message {
@@ -368,16 +403,15 @@ $unread_count = $unread_result->fetch_assoc()['count'];
         
         .notification-actions {
             display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
+            gap: 8px;
         }
         
-        .btn-action {
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 11px;
+            border-radius: 3px;
             text-decoration: none;
+            font-weight: 600;
         }
         
         .btn-read {
@@ -385,26 +419,14 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             color: #0b1a33;
         }
         
-        .btn-read:hover {
-            background: #b8d1ff;
-        }
-        
         .btn-view {
-            background: #e6f0ff;
-            color: #0b1a33;
-        }
-        
-        .btn-view:hover {
-            background: #b8d1ff;
+            background: #0b1a33;
+            color: white;
         }
         
         .btn-delete {
             background: #fee2e2;
             color: #991b1b;
-        }
-        
-        .btn-delete:hover {
-            background: #fecaca;
         }
         
         .empty-state {
@@ -413,10 +435,9 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             color: #5a6f8c;
         }
         
-        .empty-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-            opacity: 0.5;
+        .empty-state h3 {
+            color: #0b1a33;
+            margin-bottom: 8px;
         }
         
         .unread-badge {
@@ -425,8 +446,23 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 11px;
-            font-weight: 700;
             margin-left: 8px;
+        }
+        
+        .doctor-tag {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 5px;
+            background: #e6f0ff;
+            color: #0b1a33;
+        }
+        
+        .doctor-tag.specialist {
+            background: #f3e8ff;
+            color: #6b21a8;
         }
     </style>
 </head>
@@ -460,11 +496,13 @@ $unread_count = $unread_result->fetch_assoc()['count'];
     <div class="main">
         
         <div class="page-header">
-            <h1>Notifications</h1>
-            <p>Appointment reminders for <?= htmlspecialchars($child_info['first_name'] . ' ' . $child_info['last_name']) ?></p>
+            <div>
+                <h1>Notifications</h1>
+                <p><?= htmlspecialchars($child_info['first_name'] . ' ' . $child_info['last_name']) ?></p>
+            </div>
         </div>
         
-        <!-- Stats Cards -->
+        <!-- Stats Cards - Nice visual stats -->
         <div class="stats-grid">
             <div class="stat-card unread">
                 <div class="stat-number"><?= $unread_count ?></div>
@@ -476,126 +514,130 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             </div>
         </div>
         
-        <!-- Mark All Button -->
-        <?php if ($unread_count > 0): ?>
-        <div class="action-bar">
-            <a href="?mark_all=1" class="btn-mark-all">✓ Mark All as Read</a>
+        <!-- Filter Tabs - All and Unread -->
+        <div class="filter-tabs">
+            <a href="?filter=all" class="filter-tab <?= $filter == 'all' ? 'active' : '' ?>">All</a>
+            <a href="?filter=unread" class="filter-tab <?= $filter == 'unread' ? 'active' : '' ?>">Unread (<?= $unread_count ?>)</a>
         </div>
-        <?php endif; ?>
+        
+        <!-- Action Bar - Just Mark All and Clear Read -->
+        <div class="action-bar">
+            <?php if ($unread_count > 0): ?>
+                <a href="?mark_all=1<?= $filter == 'unread' ? '&filter=unread' : '' ?>" class="btn btn-primary">Mark All as Read</a>
+            <?php endif; ?>
+            <?php if ($notifications->num_rows > 0): ?>
+                <a href="?delete_all_read=1<?= $filter == 'unread' ? '&filter=unread' : '' ?>" class="btn btn-danger" onclick="return confirm('Delete all read notifications?')">Clear Read</a>
+            <?php endif; ?>
+        </div>
         
         <!-- Notifications List -->
         <div class="card">
-            <h2>All Notifications</h2>
-            
-            <?php if ($notifications && $notifications->num_rows > 0): ?>
-                <div class="notification-list">
-                    
-                    <?php while ($notif = $notifications->fetch_assoc()): 
+            <div class="card-header">
+                <h2>Notification Center</h2>
+                <span class="badge"><?= $notifications->num_rows ?></span>
+            </div>
+            <div class="card-body">
+                
+                <?php if ($notifications && $notifications->num_rows > 0): ?>
+                    <div class="notification-list">
                         
-                        // Check if urgent (today/tomorrow appointment)
-                        $is_urgent = false;
-                        if ($notif['notification_type'] == 'appointment_reminder' && $notif['related_id']) {
-                            $apt_check = $conn->query("
-                                SELECT DATEDIFF(appointment_date, CURDATE()) as days_until 
-                                FROM appointments 
-                                WHERE appointment_id = {$notif['related_id']}
-                            ");
-                            if ($apt_check && $apt_check->num_rows > 0) {
-                                $apt_data = $apt_check->fetch_assoc();
-                                $is_urgent = ($apt_data['days_until'] <= 1);
+                        <?php while ($notif = $notifications->fetch_assoc()): 
+                            
+                            // Get doctor type if appointment
+                            $doctor_type = '';
+                            $doctor_tag = '';
+                            if ($notif['notification_type'] == 'appointment_reminder' && $notif['related_id']) {
+                                $apt_info = $conn->query("
+                                    SELECT d.doctor_role
+                                    FROM appointments a
+                                    JOIN doctors d ON a.doctor_id = d.doctor_id
+                                    WHERE a.appointment_id = {$notif['related_id']}
+                                ");
+                                if ($apt_info && $apt_info->num_rows > 0) {
+                                    $info = $apt_info->fetch_assoc();
+                                    $doctor_type = $info['doctor_role'];
+                                    $doctor_tag = $doctor_type == 'specialist' ? 'specialist' : '';
+                                }
                             }
-                        }
+                            
+                            $unread_class = $notif['is_read'] ? '' : 'unread';
+                        ?>
                         
-                        // Get doctor type
-                        $doctor_type = '';
-                        $doctor_badge = '';
-                        if ($notif['notification_type'] == 'appointment_reminder' && $notif['related_id']) {
-                            $apt_info = $conn->query("
-                                SELECT d.doctor_role 
-                                FROM appointments a
-                                JOIN doctors d ON a.doctor_id = d.doctor_id
-                                WHERE a.appointment_id = {$notif['related_id']}
-                            ");
-                            if ($apt_info && $apt_info->num_rows > 0) {
-                                $info = $apt_info->fetch_assoc();
-                                $doctor_type = $info['doctor_role'];
-                                $doctor_badge = ($doctor_type == 'specialist') ? 'doctor-specialist' : 'doctor-immunization';
-                            }
-                        }
-                        
-                        $unread_class = $notif['is_read'] ? '' : 'unread';
-                        $urgent_class = $is_urgent ? 'urgent' : '';
-                    ?>
-                    
-                    <div class="notification-item <?= $unread_class ?> <?= $urgent_class ?>">
-                        
-                        <div class="notification-header">
-                            <span class="notification-title">
-                                <?= htmlspecialchars($notif['title']) ?>
-                                <?php if ($doctor_type): ?>
-                                    <span class="doctor-badge <?= $doctor_badge ?>">
-                                        <?= ucfirst($doctor_type) ?>
-                                    </span>
+                        <div class="notification-item <?= $unread_class ?>">
+                            
+                            <div class="notification-header">
+                                <span class="notification-title">
+                                    <?= htmlspecialchars($notif['title']) ?>
+                                    <?php if ($doctor_type): ?>
+                                        <span class="doctor-tag <?= $doctor_tag ?>">
+                                            <?= ucfirst($doctor_type) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </span>
+                                <?php if (!$notif['is_read']): ?>
+                                    <span class="unread-dot"></span>
                                 <?php endif; ?>
-                            </span>
-                            <?php if (!$notif['is_read']): ?>
-                                <span class="new-badge">NEW</span>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <div class="notification-time">
-                            <?php
-                            $time_ago = time() - strtotime($notif['created_at']);
-                            if ($time_ago < 60) {
-                                echo 'Just now';
-                            } elseif ($time_ago < 3600) {
-                                echo floor($time_ago / 60) . ' minutes ago';
-                            } elseif ($time_ago < 86400) {
-                                echo floor($time_ago / 3600) . ' hours ago';
-                            } else {
-                                echo date('M j, Y g:i A', strtotime($notif['created_at']));
-                            }
-                            ?>
-                        </div>
-                        
-                        <div class="notification-message">
-                            <?= nl2br(htmlspecialchars($notif['message'])) ?>
-                        </div>
-                        
-                        <div class="notification-actions">
+                            </div>
                             
-                            <?php if (!$notif['is_read']): ?>
-                                <a href="?mark_read=<?= $notif['notification_id'] ?>" class="btn-action btn-read">
-                                    ✓ Mark as Read
+                            <div class="notification-meta">
+                                <span>
+                                    <?php
+                                    $time_ago = time() - strtotime($notif['created_at']);
+                                    if ($time_ago < 60) {
+                                        echo 'Just now';
+                                    } elseif ($time_ago < 3600) {
+                                        echo floor($time_ago / 60) . ' minutes ago';
+                                    } elseif ($time_ago < 86400) {
+                                        echo floor($time_ago / 3600) . ' hours ago';
+                                    } else {
+                                        echo date('M j, Y', strtotime($notif['created_at']));
+                                    }
+                                    ?>
+                                </span>
+                                <span>•</span>
+                                <span>
+                                    <?= $notif['notification_type'] == 'appointment_reminder' ? 'Appointment' : 'Update' ?>
+                                </span>
+                            </div>
+                            
+                            <div class="notification-message">
+                                <?= nl2br(htmlspecialchars($notif['message'])) ?>
+                            </div>
+                            
+                            <div class="notification-actions">
+                                
+                                <?php if (!$notif['is_read']): ?>
+                                    <a href="?mark_read=<?= $notif['notification_id'] ?><?= $filter == 'unread' ? '&filter=unread' : '' ?>" class="btn-sm btn-read">
+                                        Mark Read
+                                    </a>
+                                <?php endif; ?>
+                                
+                                <?php if ($notif['notification_type'] == 'appointment_reminder'): ?>
+                                    <a href="appointments.php" class="btn-sm btn-view">
+                                        View
+                                    </a>
+                                <?php endif; ?>
+                                
+                                <a href="?delete=<?= $notif['notification_id'] ?><?= $filter == 'unread' ? '&filter=unread' : '' ?>" 
+                                   class="btn-sm btn-delete" 
+                                   onclick="return confirm('Delete this notification?')">
+                                    Delete
                                 </a>
-                            <?php endif; ?>
-                            
-                            <?php if ($notif['notification_type'] == 'appointment_reminder'): ?>
-                                <a href="appointments.php" class="btn-action btn-view">
-                                    📅 View Appointment
-                                </a>
-                            <?php endif; ?>
-                            
-                            <a href="?delete=<?= $notif['notification_id'] ?>" 
-                               class="btn-action btn-delete" 
-                               onclick="return confirm('Delete this notification?')">
-                                🗑️ Delete
-                            </a>
+                            </div>
                         </div>
+                        
+                        <?php endwhile; ?>
+                        
+                    </div>
+                <?php else: ?>
+                    
+                    <div class="empty-state">
+                        <h3>No Notifications</h3>
+                        <p>You're all caught up!</p>
                     </div>
                     
-                    <?php endwhile; ?>
-                    
-                </div>
-            <?php else: ?>
-                
-                <div class="empty-state">
-                    <div class="empty-icon">🔕</div>
-                    <h3>No Notifications</h3>
-                    <p>You're all caught up! Check back later for appointment reminders.</p>
-                </div>
-                
-            <?php endif; ?>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 </div>

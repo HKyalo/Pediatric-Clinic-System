@@ -124,7 +124,7 @@ $recent = $conn->query("
         <!-- Today's Schedule -->
         <div class="card">
             <div class="card-header">
-                <h2>📅 Today's Schedule</h2>
+                <h2>Today's Schedule</h2>
                 <a href="doctor_immunization_appointments.php" class="btn-sm">View All</a>
             </div>
             <?php if ($appointments->num_rows > 0): ?>
@@ -154,14 +154,13 @@ $recent = $conn->query("
         <!-- Children Needing Vaccines -->
         <?php if ($needing_vaccines->num_rows > 0): ?>
         <div class="card">
-            <h2>💉 Children Needing Vaccines</h2>
+            <h2>Children Needing Vaccines</h2>
             <?php while ($child = $needing_vaccines->fetch_assoc()): ?>
             <div class="patient-row">
                 <div>
                     <span class="patient-name"><?= htmlspecialchars($child['first_name'] . ' ' . $child['last_name']) ?></span>
                     <span class="patient-age"><?= $child['age_months'] ?> months</span>
-                </div>
-                <a href="doctor_vaccines.php?child_id=<?= $child['child_id'] ?>" class="btn-sm">Give Vaccines</a>
+                </div> 
             </div>
             <?php endwhile; ?>
         </div>
@@ -169,7 +168,7 @@ $recent = $conn->query("
         
         <!-- Recent Patients -->
         <div class="card">
-            <h2>📋 Recent Patients</h2>
+            <h2>Recent Patients</h2>
             <?php if ($recent->num_rows > 0): ?>
                 <?php while ($p = $recent->fetch_assoc()): ?>
                 <div class="patient-row">
@@ -185,3 +184,4 @@ $recent = $conn->query("
 </div>
 </body>
 </html>
+<?php $conn->close(); ?>

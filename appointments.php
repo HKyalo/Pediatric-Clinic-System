@@ -54,7 +54,7 @@ if ($appointment_type === 'specialist') {
         ORDER BY full_name
     ");
     $appointment_type_label = "Specialist Review";
-    $appointment_type_icon = "👨‍⚕️";
+    $appointment_type_icon = "";
 } else {
     $doctors_query = $conn->query("
         SELECT doctor_id, full_name, specialization
@@ -62,8 +62,8 @@ if ($appointment_type === 'specialist') {
         WHERE status = 'active' AND doctor_role = 'immunization'
         ORDER BY full_name
     ");
-    $appointment_type_label = "Immunization / Well-child Visit";
-    $appointment_type_icon = "💉";
+    $appointment_type_label = "immunization";
+    $appointment_type_icon = "";
 }
 
 // Handle booking a new appointment
@@ -307,7 +307,7 @@ if (isset($_GET['rescheduled'])) {
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <title>Appointments - PCASS</title>
     <style>
-        /* ===== ALL STYLES IN ONE PLACE ===== */
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #f0f4fc; }
         
@@ -437,7 +437,7 @@ if (isset($_GET['rescheduled'])) {
 
 <div class="appointments-wrapper">
     
-    <!-- Sidebar navigation - Updated to match your simplified menu -->
+    <!-- Sidebar navigation -->
     <div class="sidebar">
         <div class="sidebar-header">
             <h2>PCASS</h2>
@@ -479,18 +479,16 @@ if (isset($_GET['rescheduled'])) {
         <!-- Appointment Type Tabs -->
         <div class="type-tabs">
             <a href="?type=immunization" class="type-tab <?= $appointment_type == 'immunization' ? 'active' : '' ?>">
-                <span class="type-icon">💉</span>
-                Immunization / Well-child
+                Immunization
             </a>
             <a href="?type=specialist" class="type-tab <?= $appointment_type == 'specialist' ? 'active' : '' ?>">
-                <span class="type-icon">👨‍⚕️</span>
                 Specialist Review
             </a>
         </div>
         
         <!-- Booking form -->
         <div class="appointment-card">
-            <h2><?= $appointment_type_icon ?> Book <?= $appointment_type_label ?></h2>
+            <h2>Book for <?= $appointment_type_label ?></h2>
             
             <form method="POST">
                 <input type="hidden" name="appointment_type" value="<?= $appointment_type ?>">
@@ -602,15 +600,15 @@ if (isset($_GET['rescheduled'])) {
                                     <?php else: ?>
                                         <!-- Show different messages based on status -->
                                         <?php if ($appointment['status'] === 'Completed'): ?>
-                                            <span class="status-message status-message-completed">✓ Completed</span>
+                                            <span class="status-message status-message-completed">Completed</span>
                                         <?php elseif ($appointment['status'] === 'Cancelled'): ?>
-                                            <span class="status-message status-message-cancelled">✗ Cancelled</span>
+                                            <span class="status-message status-message-cancelled">Cancelled</span>
                                         <?php elseif ($appointment['status'] === 'Confirmed'): ?>
-                                            <span class="status-message status-message-confirmed">✓ Confirmed - Contact clinic to reschedule</span>
+                                            <span class="status-message status-message-confirmed">Confirmed - Contact clinic to reschedule</span>
                                         <?php elseif ($is_past && $appointment['status'] === 'Pending'): ?>
-                                            <span class="status-message status-message-past">⏰ Past appointment - Please rebook</span>
+                                            <span class="status-message status-message-past">Past appointment - Please rebook</span>
                                         <?php elseif ($is_past): ?>
-                                            <span class="status-message status-message-past">⏰ Past appointment</span>
+                                            <span class="status-message status-message-past">Past appointment</span>
                                         <?php else: ?>
                                             <span class="status-message-default">No actions available</span>
                                         <?php endif; ?>
@@ -633,7 +631,7 @@ if (isset($_GET['rescheduled'])) {
 <div id="rescheduleModal" class="modal">
     <div class="modal-content">
         <span class="modal-close" onclick="closeRescheduleModal()">&times;</span>
-        <div class="modal-header">🔄 Reschedule Appointment</div>
+        <div class="modal-header">Reschedule Appointment</div>
         
         <form method="POST">
             <input type="hidden" id="reschedule_id" name="appointment_id">
@@ -655,7 +653,7 @@ if (isset($_GET['rescheduled'])) {
             </div>
             
             <button type="submit" name="reschedule_appointment" class="btn-primary">
-                ✓ Confirm Reschedule
+                Confirm Reschedule
             </button>
         </form>
     </div>

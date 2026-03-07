@@ -11,8 +11,15 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'doctor' || $_SES
 $doctor_id = $_SESSION['user_id'];
 $child_id = $_GET['child_id'] ?? 0;
 
-// Get child details
-$child = $conn->query("SELECT * FROM children WHERE child_id = $child_id")->fetch_assoc();
+// Get child details with guardian information
+$child_query = "
+    SELECT c.*, g.id as guardian_id, g.name as guardian_name 
+    FROM children c 
+    LEFT JOIN guardians g ON c.guardian_id = g.id 
+    WHERE c.child_id = $child_id
+";
+$child = $conn->query($child_query)->fetch_assoc();
+
 if (!$child) {
     header("Location: doctor_immunization_patients.php");
     exit();
@@ -28,13 +35,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
     $notes = $_POST['notes'];
     $assigned_to = $_POST['assigned_to'] ?: null;
     
-    $stmt = $conn->prepare("INSERT INTO flags (child_id, flagged_by, assigned_to, flag_type, reason, notes, status) VALUES (?, ?, ?, ?, ?, ?, 'new')");
-    $stmt->bind_param("iiisss", $child_id, $doctor_id, $assigned_to, $flag_type, $reason, $notes);
+    // Start transaction
+    $conn->begin_transaction();
     
-    if ($stmt->execute()) {
-        $message = "Child flagged successfully for specialist review.";
-        $msg_type = "success";
-    } else {
+    try {
+        // Insert flag
+        $stmt = $conn->prepare("INSERT INTO flags (child_id, flagged_by, assigned_to, flag_type, reason, notes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'new', NOW())");
+        $stmt->bind_param("iiisss", $child_id, $doctor_id, $assigned_to, $flag_type, $reason, $notes);
+        
+        if ($stmt->execute()) {
+            $flag_id = $conn->insert_id;
+            
+            // ALWAYS send notification to guardian if they exist (mandatory)
+            if (!empty($child['guardian_id'])) {
+                $child_name = $child['first_name'] . ' ' . $child['last_name'];
+                
+                // Create title based on flag type
+                $type_labels = [
+                    'growth' => 'Growth Concern',
+                    'milestone' => 'Developmental Milestone Review',
+                    'vaccine' => 'Vaccine-Related Concern',
+                    'multiple' => 'Multiple Concerns',
+                    'other' => 'Specialist Review'
+                ];
+                $title = $type_labels[$flag_type] . ' for ' . $child_name;
+                
+                // Create message
+                $message = "During an immunization checkup, our doctor has identified that " . $child_name . " needs to be reviewed by a specialist.\n\n";
+                $message .= "Reason: " . $reason . "\n";
+                if (!empty($notes)) {
+                    $message .= "Additional Notes: " . $notes . "\n\n";
+                }
+                $message .= "A specialist will review your child's case";
+                
+                // Insert notification
+                $notif_stmt = $conn->prepare("
+                    INSERT INTO notifications 
+                    (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at) 
+                    VALUES (?, ?, 'flag', ?, ?, ?, 0, NOW())
+                ");
+                $notif_stmt->bind_param("iissi", $child['guardian_id'], $child_id, $title, $message, $flag_id);
+                $notif_stmt->execute();
+            }
+            
+            $conn->commit();
+            $message = "Child flagged successfully for specialist review.";
+            if (!empty($child['guardian_id'])) {
+                $message .= " Parent has been notified.";
+            } else {
+                $message .= " Note: No parent/guardian is linked to this child.";
+            }
+            $msg_type = "success";
+        } else {
+            throw new Exception("Error creating flag");
+        }
+    } catch (Exception $e) {
+        $conn->rollback();
         $message = "Error flagging child.";
         $msg_type = "error";
     }
@@ -76,6 +132,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
         .back-link { display:inline-block; margin-bottom:20px; color:#0b1a33; text-decoration:none; }
         
         .info-box { background:#e6f0ff; padding:15px; border-left:4px solid #0b1a33; margin-bottom:20px; }
+        
+        .parent-badge {
+            background: #e6f0ff;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #0b1a33;
+            margin-top: 10px;
+        }
+        
+        .notification-badge {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-top: 15px;
+            border-left: 3px solid #28a745;
+        }
     </style>
 </head>
 <body>
@@ -103,6 +178,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
         
         <div class="child-header">
             <div class="child-name"><?= htmlspecialchars($child['first_name'] . ' ' . $child['last_name']) ?></div>
+            <?php if (!empty($child['guardian_name'])): ?>
+            <div class="parent-badge">Parent: <?= htmlspecialchars($child['guardian_name']) ?></div>
+            <?php else: ?>
+            <div class="parent-badge" style="background:#fff3cd; color:#856404;">No parent/guardian linked</div>
+            <?php endif; ?>
         </div>
         
         <?php if (isset($message)): ?>
@@ -110,9 +190,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
         <?php endif; ?>
         
         <div class="info-box">
-            <strong>⚠️ Flag for Specialist Review</strong>
+            <strong>Flag for Specialist Review</strong>
             <p style="margin-top:5px;">Use this to refer a child to a specialist when you notice growth concerns, developmental delays, or any other issues that need expert review.</p>
         </div>
+        
         
         <div class="card">
             <div class="card-header">
@@ -144,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
                 <div class="form-group">
                     <label>Assign to Specialist (optional)</label>
                     <select name="assigned_to" class="form-control">
-                        <option value="">-- Let system assign based on availability --</option>
+                        <option value="">-- select specialist --</option>
                         <?php while ($spec = $specialists->fetch_assoc()): ?>
                         <option value="<?= $spec['doctor_id'] ?>">
                             Dr. <?= htmlspecialchars($spec['full_name']) ?> (<?= htmlspecialchars($spec['specialization'] ?: 'Specialist') ?>)

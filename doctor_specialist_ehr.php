@@ -384,13 +384,12 @@ foreach ($milestone_data as $num => $data) {
                 <div class="child-info">
                     Age: <?= $age_years ?> years (<?= $age_months ?> months) • 
                     DOB: <?= $child['date_of_birth'] ?> • 
-                    Gender: <?= $child['gender'] ?> •
-                    Blood Type: <?= $child['blood_type'] ?? 'Not recorded' ?>
+                    Gender: <?= $child['gender'] ?> 
                 </div>
             </div>
             <?php if ($flag): ?>
             <div style="margin-top:15px; padding:10px; background:#fee2e2; border-left:4px solid #dc2626;">
-                <strong>🚩 Flag Reason:</strong> <?= htmlspecialchars($flag['reason']) ?><br>
+                <strong>Flag Reason:</strong> <?= htmlspecialchars($flag['reason']) ?><br>
                 <small>Flagged by: <?= htmlspecialchars($flag['flagged_by_name'] ?? 'System') ?> on <?= date('M d, Y', strtotime($flag['created_at'])) ?></small>
             </div>
             <?php endif; ?>
@@ -402,12 +401,12 @@ foreach ($milestone_data as $num => $data) {
         
         <!-- Tabs -->
         <div class="tabs">
-            <a href="?child_id=<?= $child_id ?>&tab=overview" class="tab <?= $active_tab == 'overview' ? 'active' : '' ?>">📋 Patient Overview</a>
-            <a href="?child_id=<?= $child_id ?>&tab=growth" class="tab <?= $active_tab == 'growth' ? 'active' : '' ?>">📈 Growth</a>
-            <a href="?child_id=<?= $child_id ?>&tab=vaccines" class="tab <?= $active_tab == 'vaccines' ? 'active' : '' ?>">💉 Vaccines</a>
-            <a href="?child_id=<?= $child_id ?>&tab=development" class="tab <?= $active_tab == 'development' ? 'active' : '' ?>">🧠 Development</a>
-            <a href="?child_id=<?= $child_id ?>&tab=assessment" class="tab <?= $active_tab == 'assessment' ? 'active' : '' ?>">📝 Assessment</a>
-            <a href="?child_id=<?= $child_id ?>&tab=labs" class="tab <?= $active_tab == 'labs' ? 'active' : '' ?>">🔬 Labs</a>
+            <a href="?child_id=<?= $child_id ?>&tab=overview" class="tab <?= $active_tab == 'overview' ? 'active' : '' ?>">Patient Overview</a>
+            <a href="?child_id=<?= $child_id ?>&tab=growth" class="tab <?= $active_tab == 'growth' ? 'active' : '' ?>">Growth</a>
+            <a href="?child_id=<?= $child_id ?>&tab=vaccines" class="tab <?= $active_tab == 'vaccines' ? 'active' : '' ?>">Vaccines</a>
+            <a href="?child_id=<?= $child_id ?>&tab=development" class="tab <?= $active_tab == 'development' ? 'active' : '' ?>">Development</a>
+            <a href="?child_id=<?= $child_id ?>&tab=assessment" class="tab <?= $active_tab == 'assessment' ? 'active' : '' ?>">Assessment</a>
+            <a href="?child_id=<?= $child_id ?>&tab=labs" class="tab <?= $active_tab == 'labs' ? 'active' : '' ?>">Labs</a>
         </div>
         
         <!-- OVERVIEW TAB -->
@@ -569,11 +568,11 @@ foreach ($milestone_data as $num => $data) {
                             <td><?= ucfirst($data['category']) ?></td>
                             <td>
                                 <?php if ($achieved): ?>
-                                    <span class="badge achieved">✓ Achieved</span>
+                                    <span class="badge achieved">Achieved</span>
                                 <?php elseif ($is_delayed): ?>
-                                    <span class="badge delayed">⚠️ Delayed</span>
+                                    <span class="badge delayed">Delayed</span>
                                 <?php else: ?>
-                                    <span class="badge pending">○ Pending</span>
+                                    <span class="badge pending">Pending</span>
                                 <?php endif; ?>
                             </td>
                             <td><?= $date_val ? date('M d, Y', strtotime($date_val)) : '-' ?></td>
@@ -585,7 +584,7 @@ foreach ($milestone_data as $num => $data) {
             
             <?php if (!empty($delays)): ?>
             <div class="delay-box">
-                <h3 style="color:#991b1b; margin-bottom:10px;">⚠️ Potential Delays Detected</h3>
+                <h3 style="color:#991b1b; margin-bottom:10px;">Potential Delays Detected</h3>
                 <ul style="color:#991b1b; margin-left:20px;">
                     <?php foreach ($delays as $d): ?><li><?= $d ?></li><?php endforeach; ?>
                 </ul>
@@ -631,13 +630,13 @@ foreach ($milestone_data as $num => $data) {
                         <textarea name="treatment_plan" class="form-control" rows="3"></textarea>
                     </div>
                     
-                    <div class="section-header">🔬 Lab Orders</div>
+                    <div class="section-header">Lab Orders</div>
                     <div class="form-group">
                         <label>Tests to Order</label>
                         <textarea name="lab_orders" class="form-control" rows="3" placeholder="• Complete Blood Count&#10;• Iron Studies&#10;• Thyroid Function Test"></textarea>
                     </div>
                     
-                    <div class="section-header">💊 Prescriptions</div>
+                    <div class="section-header">Prescriptions</div>
                     <div id="prescriptions-container">
                         <div class="prescription-row">
                             <div class="grid-2">
@@ -668,13 +667,13 @@ foreach ($milestone_data as $num => $data) {
                     </div>
                     <button type="button" onclick="addPrescription()" class="btn btn-sm" style="margin-bottom:20px;">+ Add Another Medication</button>
                     
-                    <div class="section-header">📋 Referrals</div>
+                    <div class="section-header">Referrals</div>
                     <div class="form-group">
                         <label>Refer to</label>
                         <textarea name="referrals" class="form-control" rows="2"></textarea>
                     </div>
                     
-                    <div class="section-header">📅 Follow-up</div>
+                    <div class="section-header">Follow-up</div>
                     <div class="form-group">
                         <label>Follow-up Date</label>
                         <input type="date" name="follow_up_date" class="form-control">
@@ -797,7 +796,7 @@ foreach ($milestone_data as $num => $data) {
                             <td><?= htmlspecialchars($l['result_value'] ?? '-') ?></td>
                             <td>
                                 <?php if (!empty($l['attachment'])): ?>
-                                <a href="<?= htmlspecialchars($l['attachment']) ?>" download>⬇ Download</a>
+                                <a href="<?= htmlspecialchars($l['attachment']) ?>" download>Download</a>
                                 <?php endif; ?>
                             </td>
                         </tr>

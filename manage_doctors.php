@@ -12,28 +12,53 @@ if (!isset($_SESSION['admin_id']) || $_SESSION['user_type'] !== 'admin') {
 $message = "";
 $msg_type = "";
 
-// HANDLE ADD DOCTOR (UPDATED - removed department)
+// HANDLE ADD DOCTOR - UPDATED WITH PASSWORD STRENGTH
 if (isset($_POST['add_doctor'])) {
-    $pass = password_hash($_POST['password'], PASSWORD_DEFAULT);
-    $doctor_role = $_POST['doctor_role'] ?? 'immunization';
+    $password = $_POST['password'];
     
-    $check = $conn->query("SELECT doctor_id FROM doctors WHERE email = '{$_POST['email']}'");
-    if ($check->num_rows > 0) {
-        $message = "Email already exists!";
+    // Password strength validation
+    if (strlen($password) < 8) {
+        $message = "Password must be at least 8 characters long.";
         $msg_type = "error";
-    } else {
-        // Removed department from the query
-        $stmt = $conn->prepare("INSERT INTO doctors (full_name, email, phone, specialization, license_number, qualification, years_of_experience, employment_type, status, doctor_role, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssssssissss", $_POST['full_name'], $_POST['email'], $_POST['phone'], $_POST['specialization'], $_POST['license_number'], $_POST['qualification'], $_POST['years_of_experience'], $_POST['employment_type'], $_POST['status'], $doctor_role, $pass);
+    }
+    elseif (!preg_match('/[A-Z]/', $password)) {
+        $message = "Password must contain at least one uppercase letter.";
+        $msg_type = "error";
+    }
+    elseif (!preg_match('/[a-z]/', $password)) {
+        $message = "Password must contain at least one lowercase letter.";
+        $msg_type = "error";
+    }
+    elseif (!preg_match('/[0-9]/', $password)) {
+        $message = "Password must contain at least one number.";
+        $msg_type = "error";
+    }
+    elseif (!preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/', $password)) {
+        $message = "Password must contain at least one special character (!@#$%^&*).";
+        $msg_type = "error";
+    }
+    else {
+        $pass = password_hash($password, PASSWORD_DEFAULT);
+        $doctor_role = $_POST['doctor_role'] ?? 'immunization';
         
-        if ($stmt->execute()) {
-            $message = "Doctor added successfully!";
-            $msg_type = "success";
-        } else {
-            $message = "Error adding doctor: " . $stmt->error;
+        $check = $conn->query("SELECT doctor_id FROM doctors WHERE email = '{$_POST['email']}'");
+        if ($check->num_rows > 0) {
+            $message = "Email already exists!";
             $msg_type = "error";
+        } else {
+            // Removed department from the query
+            $stmt = $conn->prepare("INSERT INTO doctors (full_name, email, phone, specialization, license_number, qualification, years_of_experience, employment_type, status, doctor_role, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssssissss", $_POST['full_name'], $_POST['email'], $_POST['phone'], $_POST['specialization'], $_POST['license_number'], $_POST['qualification'], $_POST['years_of_experience'], $_POST['employment_type'], $_POST['status'], $doctor_role, $pass);
+            
+            if ($stmt->execute()) {
+                $message = "Doctor added successfully!";
+                $msg_type = "success";
+            } else {
+                $message = "Error adding doctor: " . $stmt->error;
+                $msg_type = "error";
+            }
+            $stmt->close();
         }
-        $stmt->close();
     }
 }
 
@@ -42,24 +67,58 @@ if (isset($_POST['edit_doctor'])) {
     $doctor_role = $_POST['doctor_role'] ?? 'immunization';
     
     if (!empty($_POST['password'])) {
-        $pass = password_hash($_POST['password'], PASSWORD_DEFAULT);
-        // Removed department from the query
-        $stmt = $conn->prepare("UPDATE doctors SET full_name=?, email=?, phone=?, specialization=?, license_number=?, qualification=?, years_of_experience=?, employment_type=?, status=?, doctor_role=?, password=? WHERE doctor_id=?");
-        $stmt->bind_param("ssssssissssi", $_POST['full_name'], $_POST['email'], $_POST['phone'], $_POST['specialization'], $_POST['license_number'], $_POST['qualification'], $_POST['years_of_experience'], $_POST['employment_type'], $_POST['status'], $doctor_role, $pass, $_POST['doctor_id']);
+        $password = $_POST['password'];
+        
+        // Password strength validation for edit
+        if (strlen($password) < 8) {
+            $message = "Password must be at least 8 characters long.";
+            $msg_type = "error";
+        }
+        elseif (!preg_match('/[A-Z]/', $password)) {
+            $message = "Password must contain at least one uppercase letter.";
+            $msg_type = "error";
+        }
+        elseif (!preg_match('/[a-z]/', $password)) {
+            $message = "Password must contain at least one lowercase letter.";
+            $msg_type = "error";
+        }
+        elseif (!preg_match('/[0-9]/', $password)) {
+            $message = "Password must contain at least one number.";
+            $msg_type = "error";
+        }
+        elseif (!preg_match('/[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/', $password)) {
+            $message = "Password must contain at least one special character (!@#$%^&*).";
+            $msg_type = "error";
+        }
+        else {
+            $pass = password_hash($password, PASSWORD_DEFAULT);
+            // Removed department from the query
+            $stmt = $conn->prepare("UPDATE doctors SET full_name=?, email=?, phone=?, specialization=?, license_number=?, qualification=?, years_of_experience=?, employment_type=?, status=?, doctor_role=?, password=? WHERE doctor_id=?");
+            $stmt->bind_param("ssssssissssi", $_POST['full_name'], $_POST['email'], $_POST['phone'], $_POST['specialization'], $_POST['license_number'], $_POST['qualification'], $_POST['years_of_experience'], $_POST['employment_type'], $_POST['status'], $doctor_role, $pass, $_POST['doctor_id']);
+            
+            if ($stmt->execute()) {
+                $message = "Doctor updated successfully!";
+                $msg_type = "success";
+            } else {
+                $message = "Error updating doctor: " . $stmt->error;
+                $msg_type = "error";
+            }
+            $stmt->close();
+        }
     } else {
         // Removed department from the query
         $stmt = $conn->prepare("UPDATE doctors SET full_name=?, email=?, phone=?, specialization=?, license_number=?, qualification=?, years_of_experience=?, employment_type=?, status=?, doctor_role=? WHERE doctor_id=?");
         $stmt->bind_param("ssssssissi", $_POST['full_name'], $_POST['email'], $_POST['phone'], $_POST['specialization'], $_POST['license_number'], $_POST['qualification'], $_POST['years_of_experience'], $_POST['employment_type'], $_POST['status'], $doctor_role, $_POST['doctor_id']);
+        
+        if ($stmt->execute()) {
+            $message = "Doctor updated successfully!";
+            $msg_type = "success";
+        } else {
+            $message = "Error updating doctor: " . $stmt->error;
+            $msg_type = "error";
+        }
+        $stmt->close();
     }
-    
-    if ($stmt->execute()) {
-        $message = "Doctor updated successfully!";
-        $msg_type = "success";
-    } else {
-        $message = "Error updating doctor: " . $stmt->error;
-        $msg_type = "error";
-    }
-    $stmt->close();
 }
 
 // HANDLE DELETE DOCTOR
@@ -86,6 +145,7 @@ $edit_doctor = isset($_GET['edit']) ? $conn->query("SELECT * FROM doctors WHERE 
     <meta charset="UTF-8">
     <title>Manage Doctors - PCASS</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <script src="assets/js/script.js"></script>
     <style>
         body {
             background: #f0f4fc;
@@ -146,6 +206,56 @@ $edit_doctor = isset($_GET['edit']) ? $conn->query("SELECT * FROM doctors WHERE 
             border: 1px solid #ddd;
             box-sizing: border-box;
         }
+        
+        /* Password Strength Styles */
+        .password-strength {
+            margin-top: 10px;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: #f8fafd;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .strength-item {
+            color: #5a6f8c;
+            margin: 5px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        
+        .strength-item.valid {
+            color: #10b981;
+        }
+        
+        .strength-item.invalid {
+            color: #ef4444;
+        }
+        
+        .strength-item span {
+            font-size: 12px;
+            width: 16px;
+            display: inline-block;
+        }
+        
+        .strength-item.valid span::before {
+            content: "✓";
+        }
+        
+        .strength-item.invalid span::before {
+            content: "○";
+        }
+        
+        .password-hint {
+            font-size: 11px;
+            color: #5a6f8c;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+        }
+        
         .btn {
             background: #0b1a33;
             color: white;
@@ -153,7 +263,15 @@ $edit_doctor = isset($_GET['edit']) ? $conn->query("SELECT * FROM doctors WHERE 
             border: none;
             cursor: pointer;
             margin-right: 10px;
+            border-radius: 4px;
         }
+        
+        .btn:disabled {
+            background: #5a6f8c;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
         .btn-cancel {
             background: #6c757d;
         }
@@ -254,7 +372,10 @@ $edit_doctor = isset($_GET['edit']) ? $conn->query("SELECT * FROM doctors WHERE 
         <!-- Add/Edit Form -->
         <div class="card">
             <h3><?= $edit_doctor ? 'Edit Doctor' : 'Add New Doctor' ?></h3>
-            <form method="POST">
+            <form method="POST" onsubmit="return validatePassword(
+                document.getElementById('password').value,
+                document.getElementById('password').value
+            )">
                 <?php if ($edit_doctor): ?>
                     <input type="hidden" name="doctor_id" value="<?= $edit_doctor['doctor_id'] ?>">
                 <?php endif; ?>
@@ -335,10 +456,36 @@ $edit_doctor = isset($_GET['edit']) ? $conn->query("SELECT * FROM doctors WHERE 
                 
                 <div class="form-group">
                     <label>Password <?= $edit_doctor ? '(leave blank to keep current)' : '' ?> *</label>
-                    <input type="password" name="password" class="form-control" <?= $edit_doctor ? '' : 'required' ?>>
+                    <input type="password" name="password" id="password" class="form-control" 
+                           <?= $edit_doctor ? '' : 'required' ?> minlength="8"
+                           onkeyup="checkPasswordStrength(this.value)">
                 </div>
                 
-                <button type="submit" name="<?= $edit_doctor ? 'edit_doctor' : 'add_doctor' ?>" class="btn">
+                <!-- Password Strength Indicator (only for new doctor) -->
+                <?php if (!$edit_doctor): ?>
+                <div class="password-strength">
+                    <div id="req-length" class="strength-item invalid">
+                        <span></span> At least 8 characters
+                    </div>
+                    <div id="req-upper" class="strength-item invalid">
+                        <span></span> At least 1 uppercase letter (A-Z)
+                    </div>
+                    <div id="req-lower" class="strength-item invalid">
+                        <span></span> At least 1 lowercase letter (a-z)
+                    </div>
+                    <div id="req-number" class="strength-item invalid">
+                        <span></span> At least 1 number (0-9)
+                    </div>
+                    <div id="req-special" class="strength-item invalid">
+                        <span></span> At least 1 special character (!@#$%^&*)
+                    </div>
+                    <div class="password-hint">
+                        Use a strong password with a mix of characters
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+                <button type="submit" name="<?= $edit_doctor ? 'edit_doctor' : 'add_doctor' ?>" class="btn" id="submit-btn">
                     <?= $edit_doctor ? 'Update Doctor' : 'Add Doctor' ?>
                 </button>
                 
@@ -395,6 +542,45 @@ $edit_doctor = isset($_GET['edit']) ? $conn->query("SELECT * FROM doctors WHERE 
         </div>
     </div>
 </div>
+
+<?php if (!$edit_doctor): ?>
+<script>
+// Initialize password validation for add form
+window.addEventListener('DOMContentLoaded', function() {
+    const passwordField = document.getElementById('password');
+    const submitBtn = document.getElementById('submit-btn');
+    
+    if (passwordField && submitBtn) {
+        // Disable submit button initially
+        submitBtn.disabled = true;
+        
+        // Check password strength on keyup
+        passwordField.addEventListener('keyup', function() {
+            const password = this.value;
+            
+            // Requirements
+            const minLength = password.length >= 8;
+            const hasUpper = /[A-Z]/.test(password);
+            const hasLower = /[a-z]/.test(password);
+            const hasNumber = /[0-9]/.test(password);
+            const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};\':"\\\\|,.<>\/?]/.test(password);
+            
+            // Update UI
+            document.getElementById('req-length').className = minLength ? 'strength-item valid' : 'strength-item invalid';
+            document.getElementById('req-upper').className = hasUpper ? 'strength-item valid' : 'strength-item invalid';
+            document.getElementById('req-lower').className = hasLower ? 'strength-item valid' : 'strength-item invalid';
+            document.getElementById('req-number').className = hasNumber ? 'strength-item valid' : 'strength-item invalid';
+            document.getElementById('req-special').className = hasSpecial ? 'strength-item valid' : 'strength-item invalid';
+            
+            // Enable/disable submit button
+            const isValid = minLength && hasUpper && hasLower && hasNumber && hasSpecial;
+            submitBtn.disabled = !isValid;
+        });
+    }
+});
+</script>
+<?php endif; ?>
+
 </body>
 </html>
 <?php $conn->close(); ?>
