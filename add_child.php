@@ -1,4 +1,8 @@
 <?php
+// Set session to last 24 hours 
+ini_set('session.cookie_lifetime', 86400); // 24 hours in seconds
+ini_set('session.gc_maxlifetime', 86400);   // 24 hours in seconds
+session_set_cookie_params(86400); // Also set cookie params
 session_start();
 require_once __DIR__ . "/config/db.php";
 
@@ -50,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Strict//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">

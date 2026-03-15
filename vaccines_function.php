@@ -1,4 +1,8 @@
 <?php
+// Set session to last 24 hours 
+ini_set('session.cookie_lifetime', 86400); // 24 hours in seconds
+ini_set('session.gc_maxlifetime', 86400);   // 24 hours in seconds
+session_set_cookie_params(86400); // Also set cookie params
 // vaccine_functions.php
 
 /**
