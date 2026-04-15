@@ -35,11 +35,11 @@ if ($verify_child->get_result()->num_rows == 0) {
 $verify_child->close();
 
 // ============================================
-// AUTO-CREATE NOTIFICATIONS FOR UPCOMING APPOINTMENTS
+// AUTO-CREATE NOTIFICATIONS FOR UPCOMING APPOINTMENTS (1 DAY BEFORE)
 // ============================================
 
 $today = date('Y-m-d');
-$three_days = date('Y-m-d', strtotime('+3 days'));
+$tomorrow = date('Y-m-d', strtotime('+1 days'));
 
 $appointments_query = "
     SELECT 
@@ -58,7 +58,7 @@ $appointments_query = "
     WHERE c.guardian_id = $guardian_id
     AND a.child_id = $selected_child_id
     AND a.status IN ('Pending', 'Confirmed')
-    AND a.appointment_date BETWEEN '$today' AND '$three_days'
+    AND a.appointment_date BETWEEN '$today' AND '$tomorrow'
 ";
 
 $appointments = $conn->query($appointments_query);
@@ -102,6 +102,78 @@ if ($appointments && $appointments->num_rows > 0) {
                  {$apt['appointment_id']}, 0, NOW())
             ";
             $conn->query($insert_query);
+        }
+    }
+}
+
+// ============================================
+// AUTO-CREATE VACCINE REMINDER NOTIFICATIONS
+// ============================================
+
+// Get child details for vaccine calculation
+$child_data = $conn->query("SELECT date_of_birth, first_name, last_name FROM children WHERE child_id = $selected_child_id")->fetch_assoc();
+if ($child_data) {
+    $child_name = $child_data['first_name'] . ' ' . $child_data['last_name'];
+    $dob = new DateTime($child_data['date_of_birth']);
+    $today_dt = new DateTime();
+    $age_weeks = floor($dob->diff($today_dt)->days / 7);
+    
+    // Get all vaccines
+    $all_vaccines = $conn->query("SELECT * FROM vaccines ORDER BY min_age_weeks");
+    
+    // Get vaccines already given
+    $given_vaccines = $conn->query("SELECT vaccine_id FROM vaccination_records WHERE child_id = $selected_child_id");
+    $given_ids = [];
+    while ($row = $given_vaccines->fetch_assoc()) {
+        $given_ids[] = $row['vaccine_id'];
+    }
+    
+    // Check for upcoming or overdue vaccines
+    while ($vaccine = $all_vaccines->fetch_assoc()) {
+        $vaccine_id = $vaccine['vaccine_id'];
+        
+        // Skip if already given
+        if (in_array($vaccine_id, $given_ids)) {
+            continue;
+        }
+        
+        $due_weeks = $vaccine['min_age_weeks'];
+        $status = '';
+        $title = '';
+        
+        if ($age_weeks >= $due_weeks) {
+            $status = 'overdue';
+            $title = "Vaccine Overdue: " . $vaccine['vaccine_name'];
+        } elseif ($age_weeks >= $due_weeks - 2) {
+            $status = 'upcoming';
+            $title = "Vaccine Due Soon: " . $vaccine['vaccine_name'];
+        } else {
+            continue; // Not due yet
+        }
+        
+        $due_date = date('M d, Y', strtotime($child_data['date_of_birth'] . " + {$due_weeks} weeks"));
+        $message = $child_name . " needs " . $vaccine['vaccine_name'] . " (Dose " . $vaccine['dose_number'] . "). Due by " . $due_date . ".";
+        
+        // Check if notification already exists
+        $check_vaccine = $conn->query("
+            SELECT notification_id FROM notifications 
+            WHERE guardian_id = $guardian_id 
+            AND child_id = $selected_child_id
+            AND related_id = $vaccine_id
+            AND notification_type = 'vaccine_reminder'
+        ");
+        
+        if ($check_vaccine && $check_vaccine->num_rows == 0) {
+            $insert_vaccine = "
+                INSERT INTO notifications 
+                (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at)
+                VALUES 
+                ($guardian_id, $selected_child_id, 'vaccine_reminder', 
+                 '" . $conn->real_escape_string($title) . "',
+                 '" . $conn->real_escape_string($message) . "',
+                 $vaccine_id, 0, NOW())
+            ";
+            $conn->query($insert_vaccine);
         }
     }
 }
@@ -227,7 +299,6 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             font-weight: 600;
         }
         
-        /* Stats Cards - Keeping these as they look nice */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -468,6 +539,30 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             background: #f3e8ff;
             color: #6b21a8;
         }
+        
+        .notification-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        
+        .type-appointment {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .type-vaccine {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .type-flag {
+            background: #fef3c7;
+            color: #92400e;
+        }
     </style>
 </head>
 <body>
@@ -506,7 +601,7 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             </div>
         </div>
         
-        <!-- Stats Cards - Nice visual stats -->
+        <!-- Stats Cards -->
         <div class="stats-grid">
             <div class="stat-card unread">
                 <div class="stat-number"><?= $unread_count ?></div>
@@ -518,13 +613,13 @@ $unread_count = $unread_result->fetch_assoc()['count'];
             </div>
         </div>
         
-        <!-- Filter Tabs - All and Unread -->
+        <!-- Filter Tabs -->
         <div class="filter-tabs">
             <a href="?filter=all" class="filter-tab <?= $filter == 'all' ? 'active' : '' ?>">All</a>
             <a href="?filter=unread" class="filter-tab <?= $filter == 'unread' ? 'active' : '' ?>">Unread (<?= $unread_count ?>)</a>
         </div>
         
-        <!-- Action Bar - Just Mark All and Clear Read -->
+        <!-- Action Bar -->
         <div class="action-bar">
             <?php if ($unread_count > 0): ?>
                 <a href="?mark_all=1<?= $filter == 'unread' ? '&filter=unread' : '' ?>" class="btn btn-primary">Mark All as Read</a>
@@ -564,6 +659,20 @@ $unread_count = $unread_result->fetch_assoc()['count'];
                                 }
                             }
                             
+                            // Get notification type label and badge class
+                            $type_labels = [
+                                'appointment_reminder' => ['label' => 'Appointment Reminder', 'class' => 'type-appointment'],
+                                'appointment_confirmation' => ['label' => 'Appointment Confirmation', 'class' => 'type-appointment'],
+                                'appointment_cancelled' => ['label' => 'Appointment Cancelled', 'class' => 'type-appointment'],
+                                'appointment_rescheduled' => ['label' => 'Appointment Rescheduled', 'class' => 'type-appointment'],
+                                'vaccine_reminder' => ['label' => 'Vaccine Reminder', 'class' => 'type-vaccine'],
+                                'flag' => ['label' => 'Medical Review Needed', 'class' => 'type-flag']
+                            ];
+                            
+                            $type_info = $type_labels[$notif['notification_type']] ?? ['label' => 'Update', 'class' => ''];
+                            $type_label = $type_info['label'];
+                            $type_class = $type_info['class'];
+                            
                             $unread_class = $notif['is_read'] ? '' : 'unread';
                         ?>
                         
@@ -577,6 +686,9 @@ $unread_count = $unread_result->fetch_assoc()['count'];
                                             <?= ucfirst($doctor_type) ?>
                                         </span>
                                     <?php endif; ?>
+                                    <span class="notification-type-badge <?= $type_class ?>">
+                                        <?= $type_label ?>
+                                    </span>
                                 </span>
                                 <?php if (!$notif['is_read']): ?>
                                     <span class="unread-dot"></span>
@@ -599,9 +711,7 @@ $unread_count = $unread_result->fetch_assoc()['count'];
                                     ?>
                                 </span>
                                 <span>•</span>
-                                <span>
-                                    <?= $notif['notification_type'] == 'appointment_reminder' ? 'Appointment' : 'Update' ?>
-                                </span>
+                                <span><?= $type_label ?></span>
                             </div>
                             
                             <div class="notification-message">
@@ -616,9 +726,21 @@ $unread_count = $unread_result->fetch_assoc()['count'];
                                     </a>
                                 <?php endif; ?>
                                 
-                                <?php if ($notif['notification_type'] == 'appointment_reminder'): ?>
+                                <?php if (strpos($notif['notification_type'], 'appointment') !== false): ?>
                                     <a href="appointments.php" class="btn-sm btn-view">
-                                        View
+                                        View Appointments
+                                    </a>
+                                <?php endif; ?>
+                                
+                                <?php if ($notif['notification_type'] == 'vaccine_reminder'): ?>
+                                    <a href="medical-history.php" class="btn-sm btn-view">
+                                        View Vaccines
+                                    </a>
+                                <?php endif; ?>
+                                
+                                <?php if ($notif['notification_type'] == 'flag'): ?>
+                                    <a href="medical-history.php" class="btn-sm btn-view">
+                                        View Details
                                     </a>
                                 <?php endif; ?>
                                 
