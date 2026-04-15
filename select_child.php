@@ -63,7 +63,7 @@ function calculate_age($birth_date) {
     return $age->y;
 }
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Strict//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!DOCTYPE html>
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -77,31 +77,66 @@ function calculate_age($birth_date) {
         }
         
         body {
-            font-family: Arial, sans-serif;
-            background: #0b1a33;
-            padding: 40px;
+            font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+            min-height: 100vh;
+            background-image: url('reception.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            position: relative;
+        }
+        
+        /* Dark overlay for better readability */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 0;
         }
         
         .select-container {
+            position: relative;
+            z-index: 1;
             max-width: 1000px;
             margin: 0 auto;
+            padding: 40px 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
         
         /* Header */
         .page-header {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 50px;
         }
         
         .page-header h1 {
             color: white;
-            font-size: 36px;
+            font-size: 42px;
+            font-weight: 800;
             margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         
         .page-header p {
-            color: #a3c6ff;
-            font-size: 16px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 18px;
+        }
+        
+        /* Divider */
+        .divider {
+            width: 80px;
+            height: 4px;
+            background: #ffd966;
+            margin: 20px auto 0;
+            border-radius: 2px;
         }
         
         /* Children Grid - Fixed 3 columns */
@@ -112,23 +147,79 @@ function calculate_age($birth_date) {
             margin-bottom: 40px;
         }
         
-        /* Child Card */
+        /* Child Card - Glass effect */
         .child-card {
-            background: white;
-            border-radius: 16px;
-            padding: 30px 20px;
+            background: rgba(11, 26, 51, 0.1);
+            backdrop-filter: blur(100px);
+            border-radius: 20px;
+            padding: 35px 20px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             text-decoration: none;
             display: block;
-            border-left: 4px solid #0b1a33;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
         .child-card:hover {
             transform: translateY(-8px);
-            box-shadow: 0 8px 30px rgba(255,255,255,0.15);
+            background: rgba(11, 26, 51, 0.85);
+            border-color: #ffd966;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Add Child Card - Special style */
+        .add-child-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            border-radius: 20px;
+            padding: 35px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: block;
+            border: 1px dashed rgba(255, 217, 102, 0.5);
+        }
+        
+        .add-child-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255, 217, 102, 0.15);
+            border-color: #ffd966;
+            border-style: solid;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+        }
+        
+        .add-icon {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: rgba(255, 217, 102, 0.15);
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffd966;
+            font-size: 48px;
+            font-weight: 700;
+            border: 2px dashed #ffd966;
+        }
+        
+        .add-child-card:hover .add-icon {
+            background: rgba(255, 217, 102, 0.25);
+            border: 2px solid #ffd966;
+        }
+        
+        .add-text {
+            font-size: 22px;
+            font-weight: 700;
+            color: #ffd966;
+            margin-bottom: 8px;
+        }
+        
+        .add-subtext {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
         }
         
         /* Avatar */
@@ -136,7 +227,7 @@ function calculate_age($birth_date) {
             width: 110px;
             height: 110px;
             border-radius: 50%;
-            background: #0b1a33;
+            background: rgba(255, 255, 255, 0.15);
             margin: 0 auto 20px;
             display: flex;
             align-items: center;
@@ -148,19 +239,25 @@ function calculate_age($birth_date) {
         }
         
         .child-avatar.female {
-            background: #1e3a5f;
+            background: rgba(236, 72, 153, 0.2);
+            border-color: #ec4899;
+        }
+        
+        .child-avatar.male {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
         }
         
         /* Child Info */
         .child-name {
             font-size: 22px;
             font-weight: 700;
-            color: #0b1a33;
+            color: white;
             margin-bottom: 8px;
         }
         
         .child-details {
-            color: #5a6f8c;
+            color: rgba(255, 255, 255, 0.7);
             font-size: 14px;
             margin-bottom: 12px;
         }
@@ -176,67 +273,102 @@ function calculate_age($birth_date) {
         }
         
         .gender-badge.male {
-            background: #e6f0ff;
-            color: #0b1a33;
-            border: 1px solid #b8d1ff;
+            background: rgba(59, 130, 246, 0.2);
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.3);
         }
         
         .gender-badge.female {
-            background: #fce7f3;
-            color: #9d174d;
-            border: 1px solid #fbcfe8;
+            background: rgba(236, 72, 153, 0.2);
+            color: #f9a8d4;
+            border: 1px solid rgba(236, 72, 153, 0.3);
+        }
+        
+        /* Action Buttons Container */
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 40px;
+            flex-wrap: wrap;
         }
         
         /* Logout Link */
-        .logout-section {
-            text-align: center;
-            margin-top: 30px;
-        }
-        
         .logout-link {
-            color: #a3c6ff;
+            color: rgba(255, 255, 255, 0.8);
             text-decoration: none;
             font-size: 14px;
-            padding: 8px 20px;
-            border: 1px solid #1e3a5f;
-            border-radius: 6px;
+            padding: 10px 25px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
             transition: all 0.2s;
+            backdrop-filter: blur(5px);
         }
         
         .logout-link:hover {
             color: white;
-            background: #1e3a5f;
-            border-color: #ffd966;
+            background: rgba(255, 217, 102, 0.2);
         }
         
-        /* Empty State */
+        /* Empty State - Glass card */
         .empty-state {
-            background: white;
-            border-radius: 16px;
+            background: rgba(11, 26, 51, 0.75);
+            backdrop-filter: blur(12px);
+            border-radius: 20px;
             padding: 60px;
             text-align: center;
-            border-left: 4px solid #0b1a33;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
         .empty-state p {
-            color: #5a6f8c;
-            font-size: 16px;
-            margin-bottom: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 18px;
+            margin-bottom: 25px;
         }
         
-        .add-child-btn {
+        .add-child-empty-btn {
             display: inline-block;
-            background: #0b1a33;
-            color: white;
+            background: #ffd966;
+            color: #0b1a33;
             text-decoration: none;
-            padding: 12px 30px;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: background 0.2s;
+            padding: 14px 35px;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 16px;
+            transition: all 0.3s;
         }
         
-        .add-child-btn:hover {
-            background: #1e3a5f;
+        .add-child-empty-btn:hover {
+            background: #ffcd38;
+            transform: scale(1.05);
+        }
+        
+        /* Responsive */
+        @media (max-width: 800px) {
+            .children-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+            }
+        }
+        
+        @media (max-width: 550px) {
+            .children-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .page-header h1 {
+                font-size: 32px;
+            }
+            
+            .child-avatar, .add-icon {
+                width: 80px;
+                height: 80px;
+                font-size: 32px;
+            }
+            
+            .child-name, .add-text {
+                font-size: 18px;
+            }
         }
     </style>
 </head>
@@ -248,6 +380,7 @@ function calculate_age($birth_date) {
     <div class="page-header">
         <h1>Select Child</h1>
         <p>Who are you here for today?</p>
+        <div class="divider"></div>
     </div>
     
     <!-- ===== CHILDREN GRID ===== -->
@@ -256,7 +389,7 @@ function calculate_age($birth_date) {
         <!-- Empty State - No Children -->
         <div class="empty-state">
             <p>You haven't added any children yet.</p>
-            <a href="add_child.php" class="add-child-btn">➕ Add Your First Child</a>
+            <a href="add_child.php" class="add-child-empty-btn">+ Add Your First Child</a>
         </div>
         
     <?php else: ?>
@@ -292,12 +425,20 @@ function calculate_age($birth_date) {
             </a>
             
             <?php endforeach; ?>
+            
+            <!-- ADD CHILD CARD - Appears as an extra card in the grid -->
+            <a href="add_child.php" class="add-child-card">
+                <div class="add-icon">+</div>
+                <div class="add-text">Add Child</div>
+                <div class="add-subtext">Register a new child</div>
+            </a>
+            
         </div>
         
     <?php endif; ?>
     
     <!-- ===== LOGOUT LINK ===== -->
-    <div class="logout-section">
+    <div class="action-buttons">
         <a href="logout.php" class="logout-link">← Logout</a>
     </div>
 </div>

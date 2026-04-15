@@ -28,7 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $guardian = $result->fetch_assoc();
             
             if (password_verify($password, $guardian['password'])) {
-                // Guardian login successful
                 $_SESSION['guardian_id'] = $guardian['id'];
                 $_SESSION['guardian_name'] = $guardian['name'];
                 $_SESSION['guardian_email'] = $guardian['email'];
@@ -36,7 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $stmt->close();
                 
-                // Check if they have children, redirect accordingly
                 $childCheck = $conn->prepare("SELECT child_id FROM children WHERE guardian_id = ?");
                 $childCheck->bind_param("i", $guardian['id']);
                 $childCheck->execute();
@@ -73,7 +71,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($doctor['status'] !== 'Active') {
                     $error = "Your account has been deactivated. Please contact administration.";
                 } elseif (password_verify($password, $doctor['password'])) {
-                    // Doctor login successful
                     $_SESSION['user_id'] = $doctor['doctor_id'];
                     $_SESSION['name'] = $doctor['full_name'];
                     $_SESSION['email'] = $doctor['email'];
@@ -82,7 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     
                     $stmt->close();
                     
-                    // Redirect based on doctor role
                     if ($_SESSION['doctor_role'] === 'specialist') {
                         header("Location: doctor_specialist_dashboard.php");
                     } else {
@@ -108,7 +104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $admin = $result->fetch_assoc();
                     
                     if (password_verify($password, $admin['password'])) {
-                        // Admin login successful
                         $_SESSION['admin_id'] = $admin['admin_id'];
                         $_SESSION['admin_name'] = $admin['full_name'];
                         $_SESSION['admin_email'] = $admin['email'];
@@ -131,163 +126,181 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
+<html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>PCASS</title>
-    <style type="text/css">
+    <title>PCASS - Login</title>
+    <style>
         * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
         }
         
         body {
-            font-family: Arial, Helvetica, sans-serif;
-            background: #0b1a33;
+            font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
             min-height: 100vh;
+            background-image: url('reception.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            position: relative;
         }
         
-        .top-bar {
-            background: #0b1a33;
-            padding: 20px 40px;
-            text-align: right;
-            border-bottom: 1px solid #1e3a5f;
-        }
-        
-        .top-bar a {
-            color: #ffffff;
-            text-decoration: none;
-            margin-left: 30px;
-            font-size: 16px;
-            font-weight: 600;
-            opacity: 0.9;
-        }
-        
-        .top-bar a:hover {
-            opacity: 1;
-            text-decoration: underline;
-        }
-        
-        .main-content {
-            display: table;
+        /* Dark overlay for better readability */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            height: calc(100vh - 80px);
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 0;
         }
         
-        .left-panel {
-            display: table-cell;
-            width: 50%;
-            background: #0b1a33;
-            padding: 60px 60px;
+        /* Register link at top right */
+        .top-register {
+            position: absolute;
+            top: 25px;
+            right: 35px;
+            z-index: 2;
+        }
+        
+        .top-register a {
             color: white;
-            vertical-align: top;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+            padding: 8px 18px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s;
         }
         
-        .right-panel {
-            display: table-cell;
-            width: 50%;
-            background: #f0f4fc;
-            padding: 60px 60px;
-            vertical-align: top;
+        .top-register a:hover {
+            background: rgba(255, 255, 255, 0.3);
+            text-decoration: none;
         }
         
-        .system-title {
-            font-size: 48px;
-            font-weight: 800;
-            margin-bottom: 15px;
-            letter-spacing: -0.5px;
-            color: #ffffff;
+        /* Centered glass card */
+        .login-wrapper {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            padding: 20px;
+            z-index: 1;
         }
         
-        .system-subtitle {
-            font-size: 20px;
-            margin-bottom: 20px;
-            color: #a3c6ff;
-            font-weight: 400;
-        }
-        
-        .system-description {
-            font-size: 16px;
-            line-height: 1.8;
-            color: #b8d1ff;
-            margin: 30px 0 20px;
-            max-width: 500px;
-        }
-        
-        .login-container {
-            background: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            max-width: 400px;
+        .glass-card {
+            max-width: 450px;
             margin: 0 auto;
+            background: rgba(11, 26, 51, 0.1);
+            backdrop-filter: blur(12px);
+            border-radius: 24px;
+            padding: 45px 40px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s;
         }
         
-        .login-title {
-            font-size: 28px;
-            color: #0b1a33;
-            margin-bottom: 10px;
-            font-weight: 700;
-        }
+       
         
-        .login-subtitle {
-            font-size: 14px;
-            color: #5a6f8c;
+        /* Logo/title area */
+        .logo {
+            text-align: center;
             margin-bottom: 30px;
-            line-height: 1.6;
         }
         
+        .logo h1 {
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            letter-spacing: -0.5px;
+        }
+        
+        .logo p {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 8px;
+        }
+        
+        .divider {
+            width: 60px;
+            height: 3px;
+            background: #ffd966;
+            margin: 15px auto 0;
+            border-radius: 3px;
+        }
+        
+        /* Form elements */
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 22px;
         }
         
         .form-group label {
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #1e3a5f;
+            color: white;
             font-size: 14px;
         }
         
         .form-group input {
             width: 100%;
-            padding: 12px 16px;
-            border: 1px solid #d9e2ef;
-            border-radius: 4px;
+            padding: 14px 16px;
+            border: none;
+            border-radius: 12px;
             font-size: 15px;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: inherit;
+            background: rgba(255, 255, 255, 0.9);
+            transition: all 0.3s;
         }
         
         .form-group input:focus {
             outline: none;
-            border-color: #0b1a33;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(255, 217, 102, 0.3);
         }
         
+        .form-group input::placeholder {
+            color: #8a9bb0;
+        }
+        
+        /* Login button */
         .btn-login {
             width: 100%;
             padding: 14px;
-            background: #0b1a33;
-            color: white;
+            background: #ffd966;
+            color: #0b1a33;
             border: none;
-            border-radius: 4px;
+            border-radius: 12px;
             font-size: 16px;
             font-weight: 700;
             cursor: pointer;
-            margin: 30px 0 20px;
-            font-family: Arial, Helvetica, sans-serif;
+            margin: 25px 0 20px;
+            font-family: inherit;
+            transition: all 0.3s;
         }
         
         .btn-login:hover {
-            background: #1e3a5f;
+            background: #ffcd38;
+            transform: scale(1.02);
         }
         
+        /* Register link inside card */
         .register-link {
             text-align: center;
-            color: #5a6f8c;
+            color: rgba(255, 255, 255, 0.7);
             font-size: 14px;
         }
         
         .register-link a {
-            color: #0b1a33;
+            color: #ffd966;
             text-decoration: none;
             font-weight: 600;
         }
@@ -296,82 +309,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             text-decoration: underline;
         }
         
+        /* Error message */
         .error-message {
-            background: #ffebee;
-            color: #b71c1c;
+            background: rgba(220, 38, 38, 0.9);
+            color: white;
             padding: 12px 16px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            border-left: 4px solid #b71c1c;
+            border-radius: 12px;
+            margin-bottom: 25px;
             font-size: 14px;
+            text-align: center;
+            backdrop-filter: blur(4px);
         }
         
-        .signin-heading {
-            font-size: 32px;
-            font-weight: 700;
-            color: #ffffff;
-            margin: 30px 0 15px;
+        /* Responsive */
+        @media (max-width: 550px) {
+            .glass-card {
+                padding: 35px 25px;
+            }
+            
+            .logo h1 {
+                font-size: 26px;
+            }
+            
+            .top-register {
+                top: 15px;
+                right: 20px;
+            }
         }
     </style>
 </head>
 <body>
 
-<div class="top-bar">
+<div class="top-register">
     <a href="register.php">Register</a>
 </div>
 
-<div class="main-content">
-    <!-- Left Panel - Dark Blue -->
-    <div class="left-panel">
-        <div class="system-title">PEDIATRIC CLINIC APPOINTMENT SCHEDULING SYSTEM(PCASS)</div>
-        
-        <div style="font-size: 18px; color: #ffffff; margin-bottom: 15px;">
-            Manage your child's health efficiently
+<div class="login-wrapper">
+    <div class="glass-card">
+        <div class="logo">
+            <h1>PCASS</h1>
+            <p>Pediatric Clinic System</p>
+            <div class="divider"></div>
         </div>
         
-        <div class="system-description">
-            Register children, schedule appointments, track medical history, and receive notifications-all in one platform for parents,guardians and clinic staff.
-        </div>
-    </div>
-    
-    <!-- Right Panel - Login Form -->
-    <div class="right-panel">
-        <div class="login-container">
-            <div class="login-title">SIGN-IN TO PCASS</div>
+        <?php if ($error): ?>
+            <div class="error-message"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+        
+        <form method="post" action="">
+            <div class="form-group">
+                <label>Email Address</label>
+                <input 
+                    type="email" 
+                    name="email" 
+                    placeholder="your@email.com"
+                    value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
+                    required
+                >
+            </div>
             
-            <?php if ($error): ?>
-                <div class="error-message">⚠️ <?= htmlspecialchars($error) ?></div>
-            <?php endif; ?>
+            <div class="form-group">
+                <label>Password</label>
+                <input 
+                    type="password" 
+                    name="password" 
+                    placeholder="Enter your password"
+                    required
+                >
+            </div>
             
-            <form method="post" action="">
-                <div class="form-group">
-                    <label for="email">Email Address</label>
-                    <input 
-                        type="email" 
-                        id="email" 
-                        name="email" 
-                        value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
-                        required
-                    >
-                </div>
-                
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
-                        required
-                    >
-                </div>
-                
-                <button type="submit" class="btn-login">LOGIN</button>
-                
-                <div class="register-link">
-                    Don't have an account? <a href="register.php">Register here</a>
-                </div>
-            </form>
-        </div>
+            <button type="submit" class="btn-login">Sign In</button>
+            
+            <div class="register-link">
+                Don't have an account? <a href="register.php">Create an account</a>
+            </div>
+        </form>
     </div>
 </div>
 

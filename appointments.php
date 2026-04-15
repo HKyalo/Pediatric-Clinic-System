@@ -12,6 +12,11 @@
  * - Integration with notification system
  * 
  */
+
+// ============================================
+// SESSION CONFIGURATION
+// ============================================
+
 // Set session to last 24 hours 
 ini_set('session.cookie_lifetime', 86400); // 24 hours in seconds
 ini_set('session.gc_maxlifetime', 86400);   // 24 hours in seconds
@@ -20,8 +25,9 @@ session_set_cookie_params(86400); // Also set cookie params
 session_start();
 require_once __DIR__ . "/config/db.php";
 
-
+// ============================================
 // SECURITY VALIDATION
+// ============================================
 
 /**
  * Verify user is logged in as a guardian, redirects to login page if not authenticated
@@ -31,19 +37,106 @@ if (!isset($_SESSION['guardian_id']) || $_SESSION['user_type'] !== 'guardian') {
     exit();
 }
 
+// Set session variables after successful validation
 $guardian_id = $_SESSION['guardian_id'];
 $guardian_name = $_SESSION['guardian_name'] ?? 'Guardian';
 $selected_child_id = $_SESSION['selected_child_id'] ?? null;
 
-
-// INITIALIZATION & CONFIGURATION
+// ============================================
+// CLINIC CONFIGURATION CONSTANTS
+// ============================================
 
 /**
  * Clinic configuration constants
  */
-define('CLINIC_OPEN_TIME', '07:00'); //Clinic opening time (24hr format)
-define('CLINIC_CLOSE_TIME', '18:00');//Clinic closing time (24hr format)
-define('APPOINTMENT_SLOT_MINUTES', 90);//Duration of each appointment slot
+define('CLINIC_OPEN_TIME', '07:00'); // Clinic opening time (24hr format)
+define('CLINIC_CLOSE_TIME', '18:00'); // Clinic closing time (24hr format)
+define('APPOINTMENT_SLOT_MINUTES', 90); // Duration of each appointment slot
+
+// ============================================
+// AJAX HANDLER FOR AVAILABLE TIME SLOTS
+// ============================================
+
+// Check if this is an AJAX request for available slots
+if (isset($_GET['action']) && $_GET['action'] === 'get_available_slots') {
+    header('Content-Type: application/json');
+    
+    $selected_doctor_id = $_GET['doctor_id'] ?? 0;
+    $selected_appointment_date = $_GET['appointment_date'] ?? '';
+    
+    if (!$selected_doctor_id || !$selected_appointment_date) {
+        echo json_encode(['success' => false, 'message' => 'Missing doctor or date']);
+        exit();
+    }
+    
+    // Dynamically generate time slots based on clinic hours
+    $all_time_slots = [];
+    $slot_start_time = strtotime(CLINIC_OPEN_TIME);
+    $slot_end_time = strtotime(CLINIC_CLOSE_TIME);
+    $slot_duration_minutes = APPOINTMENT_SLOT_MINUTES;
+    
+    while ($slot_start_time < $slot_end_time) {
+        $all_time_slots[] = date('H:i:s', $slot_start_time);
+        $slot_start_time = strtotime("+{$slot_duration_minutes} minutes", $slot_start_time);
+    }
+    
+    // Get slots that are already booked
+    $booked_slots_query = $conn->prepare("
+        SELECT appointment_time 
+        FROM appointments 
+        WHERE doctor_id = ? 
+        AND appointment_date = ? 
+        AND status != 'Cancelled'
+    ");
+    $booked_slots_query->bind_param("is", $selected_doctor_id, $selected_appointment_date);
+    $booked_slots_query->execute();
+    $booked_slots_result = $booked_slots_query->get_result();
+    
+    $booked_slots_list = [];
+    while ($row = $booked_slots_result->fetch_assoc()) {
+        $booked_slots_list[] = $row['appointment_time'];
+    }
+    $booked_slots_query->close();
+    
+    // Get slots that are blocked by the doctor
+    $blocked_slots_query = $conn->prepare("
+        SELECT block_time 
+        FROM blocked_slots 
+        WHERE doctor_id = ? AND block_date = ?
+    ");
+    $blocked_slots_query->bind_param("is", $selected_doctor_id, $selected_appointment_date);
+    $blocked_slots_query->execute();
+    $blocked_slots_result = $blocked_slots_query->get_result();
+    
+    $blocked_slots_list = [];
+    while ($row = $blocked_slots_result->fetch_assoc()) {
+        $blocked_slots_list[] = $row['block_time'];
+    }
+    $blocked_slots_query->close();
+    
+    // Calculate available slots (all slots minus booked and blocked)
+    $available_slots_list = array_diff($all_time_slots, $booked_slots_list, $blocked_slots_list);
+    
+    // Format slots for display (e.g., 07:00:00 -> 7:00 AM)
+    $formatted_slots = [];
+    foreach ($available_slots_list as $slot) {
+        $time_object = DateTime::createFromFormat('H:i:s', $slot);
+        $formatted_slots[] = [
+            'value' => $slot,
+            'display' => $time_object->format('g:i A')
+        ];
+    }
+    
+    echo json_encode([
+        'success' => true,
+        'available_slots' => $formatted_slots
+    ]);
+    exit();
+}
+
+// ============================================
+// INITIALIZE VARIABLES
+// ============================================
 
 $error_message = "";
 $success_message = "";
@@ -58,15 +151,15 @@ try {
      */
     $unread_count = 0;
     if ($guardian_id && $selected_child_id) {
-        $stmt = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE guardian_id = ? AND child_id = ? AND is_read = 0");
-        if (!$stmt) {
+        $unread_query = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE guardian_id = ? AND child_id = ? AND is_read = 0");
+        if (!$unread_query) {
             throw new Exception("Failed to prepare notification count query: " . $conn->error);
         }
-        $stmt->bind_param("ii", $guardian_id, $selected_child_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $unread_count = $result->fetch_assoc()['count'];
-        $stmt->close();
+        $unread_query->bind_param("ii", $guardian_id, $selected_child_id);
+        $unread_query->execute();
+        $unread_result = $unread_query->get_result();
+        $unread_count = $unread_result->fetch_assoc()['count'];
+        $unread_query->close();
     }
 
     /**
@@ -83,7 +176,7 @@ try {
     }
     $children_query->bind_param("i", $guardian_id);
     $children_query->execute();
-    $children = $children_query->get_result();
+    $children_list = $children_query->get_result();
     $children_query->close();
 
 } catch (Exception $e) {
@@ -91,7 +184,9 @@ try {
     $error_message = "A system error occurred. Please try again later.";
 }
 
+// ============================================
 // APPOINTMENT TYPE HANDLING
+// ============================================
 
 /**
  * Determine appointment type, defaults to immunization if not specified
@@ -125,17 +220,18 @@ try {
         throw new Exception("Failed to prepare doctors query: " . $conn->error);
     }
     $doctors_query->execute();
-    $doctors_result = $doctors_query->get_result();
+    $doctors_list = $doctors_query->get_result();
     $doctors_query->close();
     
 } catch (Exception $e) {
     error_log("Database error in appointments.php: " . $e->getMessage());
     $error_message = "Unable to load doctors list.";
-    $doctors_result = null;
+    $doctors_list = null;
 }
 
-
+// ============================================
 // BOOK APPOINTMENT HANDLER
+// ============================================
 
 /**
  * Process new appointment booking
@@ -147,15 +243,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         $conn->begin_transaction();
         
         // Validate and sanitize input
-        $doctor_id = filter_input(INPUT_POST, 'doctor_id', FILTER_VALIDATE_INT);
+        $selected_doctor_id = filter_input(INPUT_POST, 'doctor_id', FILTER_VALIDATE_INT);
         $appointment_date = $_POST['appointment_date'] ?? '';
         $appointment_time = $_POST['appointment_time'] ?? '';
-        $notes = trim($_POST['notes'] ?? '');
+        $appointment_notes = trim($_POST['notes'] ?? '');
         
         /**
          * Validation Step 1: Check required fields
          */
-        if (!$doctor_id || !$appointment_date || !$appointment_time) {
+        if (!$selected_doctor_id || !$appointment_date || !$appointment_time) {
             throw new Exception("Please fill in all required fields.");
         }
         
@@ -169,73 +265,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         /**
          * Validation Step 3: Verify child belongs to guardian
          */
-        $verify_query = $conn->prepare("
+        $verify_child_query = $conn->prepare("
             SELECT child_id FROM children 
             WHERE child_id = ? AND guardian_id = ?
         ");
-        if (!$verify_query) {
+        if (!$verify_child_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $verify_query->bind_param("ii", $selected_child_id, $guardian_id);
-        $verify_query->execute();
+        $verify_child_query->bind_param("ii", $selected_child_id, $guardian_id);
+        $verify_child_query->execute();
         
-        if ($verify_query->get_result()->num_rows === 0) {
+        if ($verify_child_query->get_result()->num_rows === 0) {
             throw new Exception("Invalid child selection.");
         }
-        $verify_query->close();
+        $verify_child_query->close();
         
         /**
          * Validation Step 4: Check if time slot is already booked
          */
-        $check_query = $conn->prepare("
+        $check_slot_query = $conn->prepare("
             SELECT appointment_id FROM appointments 
             WHERE doctor_id = ? AND appointment_date = ? 
             AND appointment_time = ? AND status != 'Cancelled'
         ");
-        if (!$check_query) {
+        if (!$check_slot_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $check_query->bind_param("iss", $doctor_id, $appointment_date, $appointment_time);
-        $check_query->execute();
+        $check_slot_query->bind_param("iss", $selected_doctor_id, $appointment_date, $appointment_time);
+        $check_slot_query->execute();
         
-        if ($check_query->get_result()->num_rows > 0) {
+        if ($check_slot_query->get_result()->num_rows > 0) {
             throw new Exception("This time slot is already booked. Please choose a different time.");
         }
-        $check_query->close();
+        $check_slot_query->close();
         
         /**
          * Validation Step 5: Check if doctor has blocked this slot
          */
-        $blocked_check = $conn->prepare("
+        $check_blocked_query = $conn->prepare("
             SELECT block_id FROM blocked_slots 
             WHERE doctor_id = ? AND block_date = ? AND block_time = ?
         ");
-        if (!$blocked_check) {
+        if (!$check_blocked_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $blocked_check->bind_param("iss", $doctor_id, $appointment_date, $appointment_time);
-        $blocked_check->execute();
+        $check_blocked_query->bind_param("iss", $selected_doctor_id, $appointment_date, $appointment_time);
+        $check_blocked_query->execute();
         
-        if ($blocked_check->get_result()->num_rows > 0) {
+        if ($check_blocked_query->get_result()->num_rows > 0) {
             throw new Exception("This time slot is not available. Please choose another time.");
         }
-        $blocked_check->close();
+        $check_blocked_query->close();
         
         /**
          * All validations passed - Insert the appointment
          */
-        $insert_query = $conn->prepare("
+        $insert_appointment_query = $conn->prepare("
             INSERT INTO appointments 
             (child_id, doctor_id, appointment_date, appointment_time, status, notes)
             VALUES (?, ?, ?, ?, 'Pending', ?)
         ");
-        if (!$insert_query) {
+        if (!$insert_appointment_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $insert_query->bind_param("iisss", $selected_child_id, $doctor_id, $appointment_date, $appointment_time, $notes);
+        $insert_appointment_query->bind_param("iisss", $selected_child_id, $selected_doctor_id, $appointment_date, $appointment_time, $appointment_notes);
         
-        if (!$insert_query->execute()) {
-            throw new Exception("Failed to book appointment: " . $insert_query->error);
+        if (!$insert_appointment_query->execute()) {
+            throw new Exception("Failed to book appointment: " . $insert_appointment_query->error);
         }
         
         // Commit transaction if all operations successful
@@ -252,11 +348,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
     }
     
     // Clean up
-    if (isset($insert_query)) $insert_query->close();
+    if (isset($insert_appointment_query)) $insert_appointment_query->close();
 }
 
-
+// ============================================
 // RESCHEDULE APPOINTMENT HANDLER
+// ============================================
 
 /**
  * Process appointment rescheduling- this updates existing appointment with new date/time
@@ -268,89 +365,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reschedule_appointmen
         
         // Validate input
         $appointment_id = filter_input(INPUT_POST, 'appointment_id', FILTER_VALIDATE_INT);
-        $new_date = $_POST['new_date'] ?? '';
-        $new_time = $_POST['new_time'] ?? '';
+        $new_appointment_date = $_POST['new_date'] ?? '';
+        $new_appointment_time = $_POST['new_time'] ?? '';
         
-        if (!$appointment_id || !$new_date || !$new_time) {
+        if (!$appointment_id || !$new_appointment_date || !$new_appointment_time) {
             throw new Exception("Please fill in all fields to reschedule.");
         }
         
         /**
          * Verify appointment belongs to this guardian's child
          */
-        $verify_query = $conn->prepare("
+        $verify_ownership_query = $conn->prepare("
             SELECT a.doctor_id
             FROM appointments a
             JOIN children c ON a.child_id = c.child_id
             WHERE a.appointment_id = ? AND c.guardian_id = ?
         ");
-        if (!$verify_query) {
+        if (!$verify_ownership_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $verify_query->bind_param("ii", $appointment_id, $guardian_id);
-        $verify_query->execute();
-        $verify_result = $verify_query->get_result();
+        $verify_ownership_query->bind_param("ii", $appointment_id, $guardian_id);
+        $verify_ownership_query->execute();
+        $verify_ownership_result = $verify_ownership_query->get_result();
         
-        if ($verify_result->num_rows === 0) {
+        if ($verify_ownership_result->num_rows === 0) {
             throw new Exception("Invalid appointment.");
         }
         
-        $appointment_data = $verify_result->fetch_assoc();
+        $appointment_data = $verify_ownership_result->fetch_assoc();
         $doctor_id = $appointment_data['doctor_id'];
-        $verify_query->close();
+        $verify_ownership_query->close();
         
         /**
          * Check if new time slot is available (excluding current appointment)
          */
-        $check_query = $conn->prepare("
+        $check_availability_query = $conn->prepare("
             SELECT appointment_id FROM appointments 
             WHERE doctor_id = ? AND appointment_date = ? 
             AND appointment_time = ? AND appointment_id != ? 
             AND status != 'Cancelled'
         ");
-        if (!$check_query) {
+        if (!$check_availability_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $check_query->bind_param("issi", $doctor_id, $new_date, $new_time, $appointment_id);
-        $check_query->execute();
+        $check_availability_query->bind_param("issi", $doctor_id, $new_appointment_date, $new_appointment_time, $appointment_id);
+        $check_availability_query->execute();
         
-        if ($check_query->get_result()->num_rows > 0) {
+        if ($check_availability_query->get_result()->num_rows > 0) {
             throw new Exception("This time slot is already booked. Please choose a different time.");
         }
-        $check_query->close();
+        $check_availability_query->close();
         
         /**
          * Check if doctor has blocked this slot
          */
-        $blocked_check = $conn->prepare("
+        $check_blocked_slot_query = $conn->prepare("
             SELECT block_id FROM blocked_slots 
             WHERE doctor_id = ? AND block_date = ? AND block_time = ?
         ");
-        if (!$blocked_check) {
+        if (!$check_blocked_slot_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $blocked_check->bind_param("iss", $doctor_id, $new_date, $new_time);
-        $blocked_check->execute();
+        $check_blocked_slot_query->bind_param("iss", $doctor_id, $new_appointment_date, $new_appointment_time);
+        $check_blocked_slot_query->execute();
         
-        if ($blocked_check->get_result()->num_rows > 0) {
+        if ($check_blocked_slot_query->get_result()->num_rows > 0) {
             throw new Exception("This time slot is not available. Please choose another time.");
         }
-        $blocked_check->close();
+        $check_blocked_slot_query->close();
         
         /**
          * Update appointment with new date/time
          */
-        $update_query = $conn->prepare("
+        $update_appointment_query = $conn->prepare("
             UPDATE appointments 
             SET appointment_date = ?, appointment_time = ?, status = 'Pending'
             WHERE appointment_id = ?
         ");
-        if (!$update_query) {
+        if (!$update_appointment_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $update_query->bind_param("ssi", $new_date, $new_time, $appointment_id);
+        $update_appointment_query->bind_param("ssi", $new_appointment_date, $new_appointment_time, $appointment_id);
         
-        if (!$update_query->execute()) {
+        if (!$update_appointment_query->execute()) {
             throw new Exception("Failed to reschedule appointment.");
         }
         
@@ -365,11 +462,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reschedule_appointmen
         error_log("Appointment rescheduling error: " . $e->getMessage());
     }
     
-    if (isset($update_query)) $update_query->close();
+    if (isset($update_appointment_query)) $update_appointment_query->close();
 }
 
-
+// ============================================
 // CANCEL APPOINTMENT HANDLER
+// ============================================
 
 /**
  * Process appointment cancellation updates status to 'Cancelled' 
@@ -384,37 +482,37 @@ if (isset($_GET['cancel']) && is_numeric($_GET['cancel'])) {
         /**
          * Verify appointment belongs to this guardian
          */
-        $verify_query = $conn->prepare("
+        $verify_cancel_query = $conn->prepare("
             SELECT a.appointment_id 
             FROM appointments a
             JOIN children c ON a.child_id = c.child_id
             WHERE a.appointment_id = ? AND c.guardian_id = ?
         ");
-        if (!$verify_query) {
+        if (!$verify_cancel_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $verify_query->bind_param("ii", $appointment_id, $guardian_id);
-        $verify_query->execute();
+        $verify_cancel_query->bind_param("ii", $appointment_id, $guardian_id);
+        $verify_cancel_query->execute();
         
-        if ($verify_query->get_result()->num_rows === 0) {
+        if ($verify_cancel_query->get_result()->num_rows === 0) {
             throw new Exception("Invalid appointment.");
         }
-        $verify_query->close();
+        $verify_cancel_query->close();
         
         /**
          * Soft delete - update status to Cancelled
          */
-        $cancel_query = $conn->prepare("
+        $cancel_appointment_query = $conn->prepare("
             UPDATE appointments 
             SET status = 'Cancelled' 
             WHERE appointment_id = ?
         ");
-        if (!$cancel_query) {
+        if (!$cancel_appointment_query) {
             throw new Exception("System error: " . $conn->error);
         }
-        $cancel_query->bind_param("i", $appointment_id);
+        $cancel_appointment_query->bind_param("i", $appointment_id);
         
-        if (!$cancel_query->execute()) {
+        if (!$cancel_appointment_query->execute()) {
             throw new Exception("Failed to cancel appointment.");
         }
         
@@ -429,7 +527,7 @@ if (isset($_GET['cancel']) && is_numeric($_GET['cancel'])) {
         error_log("Appointment cancellation error: " . $e->getMessage());
     }
     
-    if (isset($cancel_query)) $cancel_query->close();
+    if (isset($cancel_appointment_query)) $cancel_appointment_query->close();
 }
 
 // ============================================
@@ -464,17 +562,18 @@ try {
     
     $appointments_query->bind_param("ii", $guardian_id, $selected_child_id);
     $appointments_query->execute();
-    $appointments = $appointments_query->get_result();
+    $appointments_list = $appointments_query->get_result();
     $appointments_query->close();
     
 } catch (Exception $e) {
     error_log("Database error in appointments.php: " . $e->getMessage());
     $error_message = "Unable to load your appointments.";
-    $appointments = null;
+    $appointments_list = null;
 }
 
-
+// ============================================
 // SUCCESS MESSAGE HANDLING
+// ============================================
 
 /**
  * Set success messages
@@ -488,7 +587,6 @@ if (isset($_GET['cancelled'])) {
 if (isset($_GET['rescheduled'])) {
     $success_message = "Appointment rescheduled successfully!";
 }
-
 
 ?>
 <!DOCTYPE html>
@@ -559,6 +657,74 @@ if (isset($_GET['rescheduled'])) {
         .status-message-confirmed { background: #d4edda; color: #155724; }
         .status-message-past { background: #e2e8f0; color: #4a5568; }
         .status-message-default { color: #5a6f8c; font-size: 12px; }
+        
+        /* NEW STYLES FOR AVAILABLE TIME SLOTS */
+        .available-slots-container {
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .available-slots-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .slot-button {
+            background: #e6f0ff;
+            border: 1px solid #b8d1ff;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #0b1a33;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        
+        .slot-button:hover {
+            background: #0b1a33;
+            color: white;
+            border-color: #0b1a33;
+        }
+        
+        .slot-button.selected {
+            background: #ffd966;
+            color: #0b1a33;
+            border-color: #ffd966;
+        }
+        
+        .loading-slots {
+            padding: 15px;
+            text-align: center;
+            background: #f8fafd;
+            border-radius: 8px;
+            color: #5a6f8c;
+        }
+        
+        .no-slots-message {
+            padding: 15px;
+            text-align: center;
+            background: #fff3cd;
+            border-radius: 8px;
+            color: #856404;
+        }
+        
+        .error-slots-message {
+            padding: 15px;
+            text-align: center;
+            background: #fee2e2;
+            border-radius: 8px;
+            color: #dc2626;
+        }
+        
+        .slot-info-message {
+            font-size: 12px;
+            color: #5a6f8c;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -618,15 +784,15 @@ if (isset($_GET['rescheduled'])) {
         <div class="appointment-card">
             <h2>Book for <?= $appointment_type_label ?></h2>
             
-            <form method="POST">
+            <form method="POST" id="bookingForm">
                 <input type="hidden" name="appointment_type" value="<?= $appointment_type ?>">
                 
                 <div class="form-row">
                     <label>Select Doctor *</label>
-                    <select name="doctor_id" class="form-control" required>
+                    <select name="doctor_id" id="doctorSelect" class="form-control" required>
                         <option value="">-- Select Doctor --</option>
-                        <?php if ($doctors_result && $doctors_result->num_rows > 0): ?>
-                            <?php while ($doctor = $doctors_result->fetch_assoc()): ?>
+                        <?php if ($doctors_list && $doctors_list->num_rows > 0): ?>
+                            <?php while ($doctor = $doctors_list->fetch_assoc()): ?>
                                 <option value="<?= $doctor['doctor_id']; ?>">
                                     Dr. <?= htmlspecialchars($doctor['full_name']); ?>
                                     <?php if ($doctor['specialization']): ?>
@@ -642,17 +808,25 @@ if (isset($_GET['rescheduled'])) {
                 
                 <div class="form-row">
                     <label>Appointment Date *</label>
-                    <input type="date" name="appointment_date" class="form-control" 
+                    <input type="date" name="appointment_date" id="appointmentDate" class="form-control" 
                            min="<?= date('Y-m-d'); ?>" required>
+                </div>
+                
+                <!-- NEW: Available Time Slots Section -->
+                <div class="form-row">
+                    <label>Available Time Slots</label>
+                    <div id="availableSlotsContainer" class="available-slots-container">
+                        <div class="slot-info-message">Select a doctor and date to see available slots</div>
+                    </div>
                 </div>
                 
                 <div class="form-row">
                     <label>Appointment Time *</label>
-                    <input type="time" name="appointment_time" class="form-control" 
+                    <input type="time" name="appointment_time" id="appointmentTime" class="form-control" 
                            min="<?= CLINIC_OPEN_TIME ?>" max="<?= CLINIC_CLOSE_TIME ?>" 
-                           step="<?= APPOINTMENT_SLOT_MINUTES * 60 ?>" required>
+                           step="<?= APPOINTMENT_SLOT_MINUTES * 60 ?>" required readonly style="background:#f8fafd;">
                     <div class="form-hint">
-                        Clinic hours: <?= date('g:i A', strtotime(CLINIC_OPEN_TIME)) ?> - <?= date('g:i A', strtotime(CLINIC_CLOSE_TIME)) ?>
+                        Click on an available slot above to select | Clinic hours: <?= date('g:i A', strtotime(CLINIC_OPEN_TIME)) ?> - <?= date('g:i A', strtotime(CLINIC_CLOSE_TIME)) ?>
                     </div>
                 </div>
                 
@@ -672,7 +846,7 @@ if (isset($_GET['rescheduled'])) {
         <div class="appointment-card">
             <h2>My Appointments</h2>
             
-            <?php if ($appointments && $appointments->num_rows > 0): ?>
+            <?php if ($appointments_list && $appointments_list->num_rows > 0): ?>
                 <table class="appointments-table">
                     <thead>
                         <tr>
@@ -685,7 +859,7 @@ if (isset($_GET['rescheduled'])) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while ($appointment = $appointments->fetch_assoc()): 
+                        <?php while ($appointment = $appointments_list->fetch_assoc()): 
                             // Determine if appointment can be modified
                             $can_modify = (
                                 $appointment['status'] === 'Pending' && 
@@ -784,7 +958,77 @@ if (isset($_GET['rescheduled'])) {
     </div>
 </div>
 
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
+// ============================================
+// AVAILABLE TIME SLOTS FUNCTIONALITY
+// ============================================
+
+$(document).ready(function() {
+    // When doctor or date changes, fetch available slots
+    $('#doctorSelect, #appointmentDate').on('change', function() {
+        fetchAvailableTimeSlots();
+    });
+});
+
+function fetchAvailableTimeSlots() {
+    var selectedDoctorId = $('#doctorSelect').val();
+    var selectedAppointmentDate = $('#appointmentDate').val();
+    var slotsContainer = $('#availableSlotsContainer');
+    
+    if (selectedDoctorId && selectedAppointmentDate) {
+        // Show loading indicator
+        slotsContainer.html('<div class="loading-slots">Loading available time slots...</div>');
+        
+        // Fetch available slots via AJAX
+        $.ajax({
+            url: 'appointments.php?action=get_available_slots',
+            type: 'GET',
+            data: {
+                doctor_id: selectedDoctorId,
+                appointment_date: selectedAppointmentDate
+            },
+            dataType: 'json',
+            success: function(response) {
+                if (response.success && response.available_slots.length > 0) {
+                    var slotsHtml = '<div class="available-slots-grid">';
+                    $.each(response.available_slots, function(index, slot) {
+                        slotsHtml += '<button type="button" class="slot-button" data-time-value="' + slot.value + '" data-time-display="' + slot.display + '" onclick="selectTimeSlot(\'' + slot.value + '\', \'' + slot.display + '\')">' + slot.display + '</button>';
+                    });
+                    slotsHtml += '</div>';
+                    slotsContainer.html(slotsHtml);
+                } else if (response.success && response.available_slots.length === 0) {
+                    slotsContainer.html('<div class="no-slots-message">No available slots for this date. Please choose another date.</div>');
+                } else {
+                    slotsContainer.html('<div class="error-slots-message">Error loading slots. Please try again.</div>');
+                }
+            },
+            error: function() {
+                slotsContainer.html('<div class="error-slots-message">Could not load available slots. Please check your connection.</div>');
+            }
+        });
+    } else if (selectedDoctorId && !selectedAppointmentDate) {
+        slotsContainer.html('<div class="slot-info-message">Please select a date to see available slots</div>');
+    } else if (!selectedDoctorId && selectedAppointmentDate) {
+        slotsContainer.html('<div class="slot-info-message">Please select a doctor to see available slots</div>');
+    } else {
+        slotsContainer.html('<div class="slot-info-message">Select a doctor and date to see available slots</div>');
+    }
+}
+
+function selectTimeSlot(timeValue, timeDisplay) {
+    // Set the time input value (remove seconds if present)
+    var formattedTime = timeValue.substring(0, 5);
+    $('#appointmentTime').val(formattedTime);
+    
+    // Highlight the selected slot button
+    $('.slot-button').removeClass('selected');
+    $('.slot-button[data-time-value="' + timeValue + '"]').addClass('selected');
+    
+    // Visual feedback that time was selected
+    $('#appointmentTime').css('background', '#e6f0ff');
+}
+
 // Open the reschedule modal with current appointment details
 function openRescheduleModal(appointmentId, currentDate, currentTime) {
     document.getElementById('reschedule_id').value = appointmentId;

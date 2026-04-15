@@ -221,7 +221,7 @@ if ($child_id) {
         .child-dashboard {
             margin-left: 260px;
             padding: 30px;
-            background: #f0f4fc;
+            background:#f0f4fc;
             flex: 1;
         }
         

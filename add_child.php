@@ -61,245 +61,280 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Add Child - PCASS</title>
     <style>
         /* ===== ADD CHILD PAGE STYLES ===== */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: Arial, sans-serif;
-            background: #0b1a33;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        
-        .add-child-card {
-            max-width: 650px;
-            width: 100%;
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        
-        /* Header - Dark Blue */
-        .header {
-            background: #0b1a33;
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 32px;
-            margin-bottom: 5px;
-            color: white;
-        }
-        
-        .header p {
-            color: #a3c6ff;
-            font-size: 14px;
-        }
-        
-        /* Content Area */
-        .content {
-            padding: 40px;
-        }
-        
-        /* Welcome Message */
-        .welcome-box {
-            background: #e6f0ff;
-            border: 2px solid #0b1a33;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        
-        .welcome-box h2 {
-            color: #0b1a33;
-            font-size: 22px;
-            margin-bottom: 8px;
-            font-weight: 700;
-        }
-        
-        .welcome-box p {
-            color: #1e3a5f;
-            font-size: 15px;
-        }
-        
-        .welcome-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
-        }
-        
-        /* Form Title */
-        .form-title {
-            color: #0b1a33;
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 25px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e2e8f0;
-        }
-        
-        /* Two Column Grid */
-        .grid-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        /* Form Elements */
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            color: #1e3a5f;
-            font-size: 14px;
-            margin-bottom: 6px;
-        }
-        
-        .required {
-            color: #ef4444;
-            margin-left: 2px;
-        }
-        
-        .optional {
-            color: #5a6f8c;
-            font-weight: 400;
-            font-size: 12px;
-            margin-left: 5px;
-        }
-        
-        .form-control {
-            width: 100%;
-            padding: 12px 14px;
-            border: 2px solid #2b394b;
-            border-radius: 8px;
-            font-size: 14px;
-            font-family: inherit;
-            transition: border 0.2s;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            border-color: #0b1a33;
-        }
-        
-        .form-control::placeholder {
-            color: #7fa2da;
-            font-size: 13px;
-        }
-        
-        select.form-control {
-            cursor: pointer;
-            background: white;
-        }
-        
-        /* Example text styling */
-        .example {
-            color: #a3c6ff;
-            font-size: 12px;
-            margin-top: 4px;
-        }
-        
-        /* Note Box */
-        .note-box {
-            background: #fff3cd;
-            border-left: 4px solid #f59e0b;
-            padding: 15px;
-            border-radius: 6px;
-            margin: 25px 0;
-            font-size: 13px;
-            color: #713f12;
-        }
-        
-        .note-box i {
-            color: #f59e0b;
-            margin-right: 5px;
-        }
-        
-        /* Button */
-        .btn-add {
-            background: #0b1a33;
-            color: white;
-            border: none;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            width: 100%;
-            transition: background 0.2s;
-            margin-top: 10px;
-        }
-        
-        .btn-add:hover {
-            background: #1e3a5f;
-        }
-        
-        /* Back Link */
-        .back-link {
-            text-align: center;
-            margin-top: 20px;
-        }
-        
-        .back-link a {
-            color: #5a6f8c;
-            text-decoration: none;
-            font-size: 14px;
-        }
-        
-        .back-link a:hover {
-            color: #0b1a33;
-            text-decoration: underline;
-        }
-        
-        /* Error Message */
-        .error {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 12px 16px;
-            border-radius: 6px;
-            margin-bottom: 25px;
-            border-left: 4px solid #ef4444;
-            font-size: 14px;
-        }
-        
-        /* Responsive */
-        @media (max-width: 600px) {
-            .grid-2 {
-                grid-template-columns: 1fr;
-            }
-            
-            .content {
-                padding: 25px;
-            }
-            
-            .header {
-                padding: 25px;
-            }
-        }
+        /* ===== ADD CHILD PAGE STYLES ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+    min-height: 100vh;
+    background-image: url('reception.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* Dark overlay for better readability */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 0;
+}
+
+.add-child-card {
+    position: relative;
+    z-index: 1;
+    max-width: 650px;
+    width: 100%;
+    background: rgba(11, 26, 51, 0.1);
+    backdrop-filter: blur(100px);
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: transform 0.3s;
+}
+
+.add-child-card:hover {
+    transform: translateY(-5px);
+}
+
+
+.header h1 {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: white;
+    letter-spacing: -0.5px;
+}
+
+.header p {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+}
+
+/* Divider */
+.divider {
+    width: 60px;
+    height: 3px;
+    background: #ffd966;
+    margin: 15px auto 0;
+    border-radius: 3px;
+}
+
+/* Content Area */
+.content {
+    padding: 40px;
+}
+
+/* Welcome Message - Glass style */
+.welcome-box {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 25px;
+    margin-bottom: 30px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.welcome-box h2 {
+    color: white;
+    font-size: 24px;
+    margin-bottom: 8px;
+    font-weight: 700;
+}
+
+.welcome-box p {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 15px;
+}
+
+/* Form Title */
+.form-title {
+    color: white;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 25px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Two Column Grid */
+.grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+/* Form Elements */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    color: white;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.required {
+    color: #ffd966;
+    margin-left: 2px;
+}
+
+.optional {
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 400;
+    font-size: 12px;
+    margin-left: 5px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.9);
+    transition: all 0.3s;
+    color: #0b1a33;
+}
+
+.form-control:focus {
+    outline: none;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(255, 217, 102, 0.3);
+}
+
+.form-control::placeholder {
+    color: #8a9bb0;
+    font-size: 13px;
+}
+
+select.form-control {
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+select.form-control option {
+    color: #0b1a33;
+}
+
+/* Example text styling */
+.example {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+    margin-top: 5px;
+}
+
+/* Note Box - Glass style */
+.note-box {
+    background: rgba(255, 255, 255, 0.08);
+    border-left: 4px solid #ffd966;
+    padding: 15px;
+    border-radius: 12px;
+    margin: 25px 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Button */
+.btn-add {
+    background: #ffd966;
+    color: #0b1a33;
+    border: none;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.3s;
+    margin-top: 10px;
+}
+
+.btn-add:hover {
+    background: #ffcd38;
+    transform: scale(1.02);
+}
+
+/* Back Link */
+.back-link {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.back-link a {
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.back-link a:hover {
+    color: #ffd966;
+    text-decoration: underline;
+}
+
+/* Error Message */
+.error {
+    background: rgba(220, 38, 38, 0.9);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    font-size: 14px;
+    text-align: center;
+    backdrop-filter: blur(4px);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .grid-2 {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .content {
+        padding: 25px;
+    }
+    
+    .header {
+        padding: 25px;
+    }
+    
+    .header h1 {
+        font-size: 28px;
+    }
+    
+    .welcome-box h2 {
+        font-size: 20px;
+    }
+}
     </style>
 </head>
 <body>
 
 <div class="add-child-card">
     
-    <!-- ===== HEADER ===== -->
-    <div class="header">
-        <h1>PCASS</h1>
-        <p>Pediatric Clinic Appointment Scheduling System</p>
-    </div>
     
     <!-- ===== MAIN CONTENT ===== -->
     <div class="content">
