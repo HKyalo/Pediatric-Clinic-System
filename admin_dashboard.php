@@ -15,29 +15,44 @@ require_once __DIR__ . "/config/db.php";
 $admin_id = $_SESSION['admin_id'];
 $admin_name = $_SESSION['admin_name'] ?? 'Administrator';
 
+// ============================================
+// KEY STATISTICS - Only the essential ones
+// ============================================
+
+// Total Children
 $children_query = $conn->query("SELECT COUNT(*) as total FROM children");
 $total_children = $children_query->fetch_assoc()['total'];
 
+// Total Guardians/Parents
 $guardians_query = $conn->query("SELECT COUNT(*) as total FROM guardians");
 $total_guardians = $guardians_query->fetch_assoc()['total'];
 
+// Total Doctors
 $doctors_query = $conn->query("SELECT COUNT(*) as total FROM doctors");
 $total_doctors = $doctors_query->fetch_assoc()['total'];
 $immunization_doctors = $conn->query("SELECT COUNT(*) as total FROM doctors WHERE doctor_role = 'immunization'")->fetch_assoc()['total'];
 $specialist_doctors = $conn->query("SELECT COUNT(*) as total FROM doctors WHERE doctor_role = 'specialist'")->fetch_assoc()['total'];
 
+// Missed Appointments (FIXED: use status = 'Missed')
+$missed_query = $conn->query("SELECT COUNT(*) as total FROM appointments WHERE status = 'Missed'");
+$missed_appointments = $missed_query->fetch_assoc()['total'];
+
+// Appointments Today
 $today = date('Y-m-d');
 $today_query = $conn->query("SELECT COUNT(*) as total FROM appointments WHERE appointment_date = '$today'");
 $appointments_today = $today_query->fetch_assoc()['total'];
 
+// Upcoming Appointments (today and future)
 $upcoming_query = $conn->query("SELECT COUNT(*) as total FROM appointments WHERE appointment_date >= CURDATE()");
 $upcoming_appointments = $upcoming_query->fetch_assoc()['total'];
 
-$pending_query = $conn->query("SELECT COUNT(*) as total FROM appointments WHERE status = 'Pending' AND appointment_date >= CURDATE()");
-$pending_appointments = $pending_query->fetch_assoc()['total'];
-
+// New this month
 $children_this_month = $conn->query("SELECT COUNT(*) as total FROM children WHERE MONTH(created_at) = MONTH(CURDATE())")->fetch_assoc()['total'];
 $guardians_this_month = $conn->query("SELECT COUNT(*) as total FROM guardians WHERE MONTH(created_at) = MONTH(CURDATE())")->fetch_assoc()['total'];
+
+// ============================================
+// CALENDAR DATA
+// ============================================
 
 $calendar_query = $conn->query("
     SELECT a.*, c.first_name, c.last_name, d.full_name as doctor_name
@@ -57,12 +72,43 @@ while ($apt = $calendar_query->fetch_assoc()) {
     $appointments_by_date[$date][] = $apt;
 }
 
+// ============================================
+// RECENT ACTIVITIES - Fix status display
+// ============================================
+
 $recent_query = $conn->query("
-    SELECT a.created_at, c.first_name, c.last_name, d.full_name as doctor_name, a.status
+    SELECT 
+        a.created_at, 
+        c.first_name, 
+        c.last_name, 
+        d.full_name as doctor_name,
+        a.status,
+        a.appointment_date,
+        a.appointment_time,
+        CASE 
+            WHEN a.status = 'Pending' AND a.appointment_date < CURDATE() THEN 'Missed'
+            ELSE a.status
+        END as display_status
     FROM appointments a
     LEFT JOIN children c ON a.child_id = c.child_id
     LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
     ORDER BY a.created_at DESC LIMIT 5
+");
+
+// ============================================
+// MISSED APPOINTMENTS LIST (FIXED: use status = 'Missed')
+// ============================================
+
+$missed_list_query = $conn->query("
+    SELECT a.appointment_id, a.appointment_date, a.appointment_time, a.status,
+           c.first_name, c.last_name, c.child_id,
+           d.full_name as doctor_name
+    FROM appointments a
+    LEFT JOIN children c ON a.child_id = c.child_id
+    LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
+    WHERE a.status = 'Missed'
+    ORDER BY a.appointment_date DESC
+    LIMIT 5
 ");
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Strict//EN">
@@ -83,14 +129,12 @@ $recent_query = $conn->query("
 
         .main-content {
             margin-left: 260px;
-            padding: 30px 30px 30px 30px;
+            padding: 30px;
             background: #f0f4fc;
             flex: 1;
-            width: calc(100vw - 260px);
-            max-width: calc(100vw - 260px);
         }
 
-        /* ── Welcome Banner ── */
+        /* Welcome Banner */
         .welcome-banner {
             background: linear-gradient(135deg, #0b1a33 0%, #1e3a5f 100%);
             color: white;
@@ -116,7 +160,7 @@ $recent_query = $conn->query("
             white-space: nowrap;
         }
 
-        /* ── Stats Grid — ALL 6 EQUAL CARDS ── */
+        /* Stats Grid - 5 Key Cards */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -126,7 +170,7 @@ $recent_query = $conn->query("
         }
 
         .stat-card {
-            background: #ffffff;
+             background: #ffffff;
             border-radius: 4px;
             box-shadow: 0 2px 10px rgba(11,26,51,0.07);
             border-left: 5px solid;
@@ -145,92 +189,54 @@ $recent_query = $conn->query("
             box-shadow: 0 10px 24px rgba(11,26,51,0.12);
         }
 
-        /* Faint watermark circle */
-        .stat-card::after {
-            content: '';
-            position: absolute;
-            top: -20px; right: -20px;
-            width: 90px; height: 90px;
-            border-radius: 50%;
-            opacity: 0.06;
-            pointer-events: none;
-        }
-
-        /* Colours */
         .stat-card.children  { border-left-color: #3b82f6; }
         .stat-card.guardians { border-left-color: #10b981; }
         .stat-card.doctors   { border-left-color: #8b5cf6; }
-        .stat-card.today     { border-left-color: #3b82f6; }
-        .stat-card.upcoming  { border-left-color: #10b981; }
-        .stat-card.pending   { border-left-color: #f59e0b; }
-
-        .stat-card.children::after,
-        .stat-card.today::after    { background: #3b82f6; }
-        .stat-card.guardians::after,
-        .stat-card.upcoming::after { background: #10b981; }
-        .stat-card.doctors::after  { background: #8b5cf6; }
-        .stat-card.pending::after  { background: #f59e0b; }
+        .stat-card.missed    { border-left-color: #ef4444; }
+        .stat-card.today     { border-left-color: #f59e0b; }
 
         .stat-label {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.9px;
+            letter-spacing: 0.8px;
             color: #5a6f8c;
             margin-bottom: 8px;
-            line-height: 1.4;
         }
 
         .stat-number {
-            font-size: 48px;
+            font-size: 42px;
             font-weight: 800;
             color: #0b1a33;
             line-height: 1;
-            letter-spacing: -2px;
-            margin-bottom: 16px;
-        }
-
-        .stat-divider {
-            height: 1px;
-            background: #e8edf5;
             margin-bottom: 12px;
         }
 
-        /* Footer row — trend text OR doctor badges */
         .stat-footer {
-            margin-top: auto;
-            display: flex;
-            align-items: center;
-            gap: 6px;
             font-size: 12px;
-            font-weight: 600;
             color: #10b981;
-            flex-wrap: wrap;
+            font-weight: 600;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e8edf5;
         }
 
+        .stat-footer.warning { color: #ef4444; }
         .stat-footer.neutral { color: #5a6f8c; }
 
-        .stat-footer-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: currentColor;
-            flex-shrink: 0;
-        }
-
-        /* Doctor sub-badges */
         .doctor-badge {
             font-size: 11px;
             font-weight: 600;
             padding: 3px 10px;
             border-radius: 20px;
-            white-space: nowrap;
+            display: inline-block;
+            margin-right: 6px;
         }
 
         .doctor-badge.immuno     { background: #eff6ff; color: #1d4ed8; }
         .doctor-badge.specialist { background: #f5f3ff; color: #6b21a8; }
 
-        /* ── Section Cards ── */
+        /* Cards */
         .card {
             background: white;
             border-radius: 4px;
@@ -243,7 +249,7 @@ $recent_query = $conn->query("
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 18px 24px 16px;
+            padding: 18px 24px;
             background: #f8fafd;
             border-bottom: 1px solid #e8edf5;
         }
@@ -269,7 +275,41 @@ $recent_query = $conn->query("
         .card-header a:hover { background: #eff6ff; }
         .card-body { padding: 24px; }
 
-        /* ── Calendar ── */
+        /* Missed Appointments List */
+        .missed-list { list-style: none; }
+
+        .missed-item {
+            padding: 14px 0;
+            border-bottom: 1px solid #f0f4fc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .missed-item:last-child { border-bottom: none; padding-bottom: 0; }
+        .missed-item:first-child { padding-top: 0; }
+
+        .missed-info { flex: 1; }
+        .missed-title { color: #1e293b; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+        .missed-meta { color: #8fa3bf; font-size: 12px; }
+
+        .btn-reschedule {
+            background: #f59e0b;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .btn-reschedule:hover { background: #d97706; }
+
+        /* Calendar */
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
@@ -294,8 +334,8 @@ $recent_query = $conn->query("
             transition: border-color 0.2s;
         }
 
-        .calendar-day:hover       { border-color: #0b1a33; }
-        .calendar-day.today       { background: #e6f0ff; border: 2px solid #0b1a33; }
+        .calendar-day:hover { border-color: #0b1a33; }
+        .calendar-day.today { background: #e6f0ff; border: 2px solid #0b1a33; }
         .calendar-day.other-month { background: #f8fafd; opacity: 0.5; }
 
         .day-number {
@@ -317,8 +357,8 @@ $recent_query = $conn->query("
         }
 
         .appointment-item.pending   { border-left-color: #f59e0b; background: #fffbeb; color: #92400e; }
-        .appointment-item.confirmed { border-left-color: #10b981; background: #ecfdf5; color: #065f46; }
         .appointment-item.completed { border-left-color: #3b82f6; background: #eff6ff; color: #1e40af; }
+        .appointment-item.missed    { border-left-color: #ef4444; background: #fef2f2; color: #991b1b; }
 
         .calendar-legend {
             display: flex;
@@ -340,10 +380,10 @@ $recent_query = $conn->query("
 
         .legend-dot { width: 10px; height: 10px; display: inline-block; }
         .dot-pending   { background: #f59e0b; }
-        .dot-confirmed { background: #10b981; }
         .dot-completed { background: #3b82f6; }
+        .dot-missed    { background: #ef4444; }
 
-        /* ── Activity List ── */
+        /* Activity List */
         .activity-list { list-style: none; }
 
         .activity-item {
@@ -355,12 +395,12 @@ $recent_query = $conn->query("
             gap: 16px;
         }
 
-        .activity-item:last-child  { border-bottom: none; padding-bottom: 0; }
+        .activity-item:last-child { border-bottom: none; padding-bottom: 0; }
         .activity-item:first-child { padding-top: 0; }
 
-        .activity-info    { flex: 1; }
-        .activity-title   { color: #1e293b; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-        .activity-meta    { color: #8fa3bf; font-size: 12px; }
+        .activity-info { flex: 1; }
+        .activity-title { color: #1e293b; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+        .activity-meta { color: #8fa3bf; font-size: 12px; }
 
         .status-badge {
             padding: 4px 11px;
@@ -373,15 +413,28 @@ $recent_query = $conn->query("
         }
 
         .status-badge.pending   { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
-        .status-badge.confirmed { background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7; }
         .status-badge.completed { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
         .status-badge.cancelled { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+        .status-badge.missed    { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
 
         .empty-state {
             text-align: center;
             padding: 40px;
             color: #5a6f8c;
             font-style: italic;
+        }
+
+        /* Responsive */
+        @media (max-width: 1000px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -420,61 +473,84 @@ $recent_query = $conn->query("
             <div class="date-box"><?= date('l, F j, Y') ?></div>
         </div>
 
-        <!-- ALL 6 STAT CARDS - NO ICONS -->
+        <!-- KEY STATISTICS CARDS - Only 5 -->
         <div class="stats-grid">
 
-            <!-- 1. Children -->
+            <!-- 1. Total Children -->
             <div class="stat-card children">
                 <div class="stat-label">Total Children</div>
                 <div class="stat-number"><?= $total_children ?></div>
-                <div class="stat-divider"></div>
                 <div class="stat-footer">
-                    <span class="stat-footer-dot"></span>
                     +<?= $children_this_month ?> this month
                 </div>
             </div>
 
-            <!-- 2. Guardians -->
+            <!-- 2. Total Guardians / Parents -->
             <div class="stat-card guardians">
-                <div class="stat-label">Total Guardians</div>
+                <div class="stat-label">Guardians / Parents</div>
                 <div class="stat-number"><?= $total_guardians ?></div>
-                <div class="stat-divider"></div>
                 <div class="stat-footer">
-                    <span class="stat-footer-dot"></span>
                     +<?= $guardians_this_month ?> this month
                 </div>
             </div>
 
-            <!-- 3. Doctors -->
+            <!-- 3. Total Doctors -->
             <div class="stat-card doctors">
                 <div class="stat-label">Total Doctors</div>
                 <div class="stat-number"><?= $total_doctors ?></div>
-                <div class="stat-divider"></div>
                 <div class="stat-footer">
                     <span class="doctor-badge immuno"><?= $immunization_doctors ?> Immunization</span>
                     <span class="doctor-badge specialist"><?= $specialist_doctors ?> Specialist</span>
                 </div>
             </div>
 
-            <!-- 4. Appointments Today -->
+            <!-- 4. Missed Appointments -->
+            <div class="stat-card missed">
+                <div class="stat-label">Missed Appointments</div>
+                <div class="stat-number"><?= $missed_appointments ?></div>
+                <div class="stat-footer warning">
+                </div>
+            </div>
+
+            <!-- 5. Appointments Today -->
             <div class="stat-card today">
                 <div class="stat-label">Appointments Today</div>
                 <div class="stat-number"><?= $appointments_today ?></div>
-            </div>
-
-            <!-- 5. Upcoming -->
-            <div class="stat-card upcoming">
-                <div class="stat-label">Upcoming Appointments</div>
-                <div class="stat-number"><?= $upcoming_appointments ?></div>
-            </div>
-
-            <!-- 6. Pending -->
-            <div class="stat-card pending">
-                <div class="stat-label">Pending Appointments</div>
-                <div class="stat-number"><?= $pending_appointments ?></div>
+                <div class="stat-footer neutral">
+                </div>
             </div>
 
         </div>
+
+        <!-- MISSED APPOINTMENTS SECTION (Requires Attention) -->
+        <?php if ($missed_list_query && $missed_list_query->num_rows > 0): ?>
+        <div class="card">
+            <div class="card-header">
+                <h2>Missed Appointments</h2>
+                <a href="manage_appointments.php">Manage All →</a>
+            </div>
+            <div class="card-body">
+                <div class="missed-list">
+                    <?php while ($missed = $missed_list_query->fetch_assoc()): ?>
+                        <div class="missed-item">
+                            <div class="missed-info">
+                                <div class="missed-title">
+                                    <?= htmlspecialchars($missed['first_name'] . ' ' . $missed['last_name']) ?>
+                                    with Dr. <?= htmlspecialchars($missed['doctor_name']) ?>
+                                </div>
+                                <div class="missed-meta">
+                                    Missed on <?= date('F d, Y', strtotime($missed['appointment_date'])) ?> at <?= date('g:i A', strtotime($missed['appointment_time'])) ?>
+                                </div>
+                            </div>
+                            <a href="manage_appointments.php?reschedule=<?= $missed['appointment_id'] ?>" class="btn-reschedule">
+                                Reschedule
+                            </a>
+                        </div>
+                    <?php endwhile; ?>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- Calendar -->
         <div class="card">
@@ -495,7 +571,7 @@ $recent_query = $conn->query("
                     <?php
                     $first_day = new DateTime(date('Y-m-01'));
                     $last_day  = new DateTime(date('Y-m-t'));
-                    $today     = new DateTime();
+                    $today_dt  = new DateTime();
                     $start_day = (int)$first_day->format('w');
 
                     for ($i = 0; $i < $start_day; $i++) echo '<div class="calendar-day other-month"></div>';
@@ -504,7 +580,7 @@ $recent_query = $conn->query("
                     while ($current_date <= $last_day) {
                         $date_str = $current_date->format('Y-m-d');
                         $day_num  = $current_date->format('j');
-                        $is_today = ($date_str == $today->format('Y-m-d'));
+                        $is_today = ($date_str == $today_dt->format('Y-m-d'));
                         $class    = 'calendar-day' . ($is_today ? ' today' : '');
 
                         echo '<div class="' . $class . '">';
@@ -531,8 +607,8 @@ $recent_query = $conn->query("
 
                 <div class="calendar-legend">
                     <div class="legend-item"><span class="legend-dot dot-pending"></span> Pending</div>
-                    <div class="legend-item"><span class="legend-dot dot-confirmed"></span> Confirmed</div>
                     <div class="legend-item"><span class="legend-dot dot-completed"></span> Completed</div>
+                    <div class="legend-item"><span class="legend-dot dot-missed"></span> Missed</div>
                 </div>
             </div>
         </div>
@@ -556,8 +632,8 @@ $recent_query = $conn->query("
                                         <?= date('F d, Y g:i A', strtotime($activity['created_at'])) ?>
                                     </div>
                                 </div>
-                                <span class="status-badge <?= strtolower($activity['status']) ?>">
-                                    <?= htmlspecialchars($activity['status']) ?>
+                                <span class="status-badge <?= strtolower($activity['display_status']) ?>">
+                                    <?= htmlspecialchars($activity['display_status']) ?>
                                 </span>
                             </div>
                         <?php endwhile; ?>

@@ -14,6 +14,16 @@ if (!isset($_SESSION['admin_id']) || $_SESSION['user_type'] !== 'admin') {
     exit();
 }
 
+// ============================================
+// AUTO-MARK MISSED APPOINTMENTS (24 HOUR GRACE PERIOD)
+// ============================================
+$conn->query("
+    UPDATE appointments 
+    SET status = 'Missed' 
+    WHERE status = 'Pending' 
+    AND CONCAT(appointment_date, ' ', appointment_time) < NOW() - INTERVAL 24 HOUR
+");
+
 $message = "";
 $msg_type = "";
 
@@ -27,8 +37,7 @@ if (isset($_POST['add_appointment'])) {
     $appointment_time = $_POST['appointment_time'];
     $notes = $_POST['notes'] ?? '';
     
-    // Check if slot is available
-    $check = $conn->prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'Cancelled'");
+    $check = $conn->prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status NOT IN ('Cancelled', 'Completed')");
     $check->bind_param("iss", $doctor_id, $appointment_date, $appointment_time);
     $check->execute();
     
@@ -59,12 +68,10 @@ if (isset($_POST['reschedule_appointment'])) {
     $new_date = $_POST['new_date'];
     $new_time = $_POST['new_time'];
     
-    // Get doctor_id for this appointment
     $apt = $conn->query("SELECT doctor_id FROM appointments WHERE appointment_id = $id")->fetch_assoc();
     $doctor_id = $apt['doctor_id'];
     
-    // Check if new slot is available
-    $check = $conn->prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND appointment_id != ? AND status != 'Cancelled'");
+    $check = $conn->prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND appointment_id != ? AND status NOT IN ('Cancelled', 'Completed')");
     $check->bind_param("issi", $doctor_id, $new_date, $new_time, $id);
     $check->execute();
     
@@ -108,25 +115,6 @@ if (isset($_GET['update_status'])) {
 }
 
 // ============================================
-// HANDLE DELETE APPOINTMENT
-// ============================================
-if (isset($_GET['delete'])) {
-    $id = $_GET['delete'];
-    
-    $stmt = $conn->prepare("DELETE FROM appointments WHERE appointment_id = ?");
-    $stmt->bind_param("i", $id);
-    
-    if ($stmt->execute()) {
-        $message = "Appointment deleted";
-        $msg_type = "success";
-    } else {
-        $message = "Error deleting";
-        $msg_type = "error";
-    }
-    $stmt->close();
-}
-
-// ============================================
 // GET DATA FOR RESCHEDULE MODAL
 // ============================================
 $reschedule = null;
@@ -139,7 +127,6 @@ if (isset($_GET['reschedule'])) {
 // GET DATA
 // ============================================
 
-// All appointments with guardian type info
 $appointments = $conn->query("
     SELECT a.*, 
            c.first_name as child_first, c.last_name as child_last,
@@ -157,14 +144,12 @@ $appointments = $conn->query("
 // Stats
 $total = $conn->query("SELECT COUNT(*) as c FROM appointments")->fetch_assoc()['c'];
 $pending = $conn->query("SELECT COUNT(*) as c FROM appointments WHERE status = 'Pending'")->fetch_assoc()['c'];
-$confirmed = $conn->query("SELECT COUNT(*) as c FROM appointments WHERE status = 'Confirmed'")->fetch_assoc()['c'];
 $cancelled = $conn->query("SELECT COUNT(*) as c FROM appointments WHERE status = 'Cancelled'")->fetch_assoc()['c'];
 $completed = $conn->query("SELECT COUNT(*) as c FROM appointments WHERE status = 'Completed'")->fetch_assoc()['c'];
+$missed = $conn->query("SELECT COUNT(*) as c FROM appointments WHERE status = 'Missed'")->fetch_assoc()['c'];
 
-// Get today's date
 $today = date('Y-m-d');
 
-// Get all children for dropdown
 $children = $conn->query("
     SELECT c.child_id, c.first_name, c.last_name, g.name as guardian_name 
     FROM children c
@@ -172,7 +157,6 @@ $children = $conn->query("
     ORDER BY c.first_name
 ");
 
-// Get all doctors for dropdown
 $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specialization FROM doctors WHERE status = 'Active' ORDER BY full_name");
 ?>
 <!DOCTYPE html>
@@ -183,462 +167,93 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
     <link rel="stylesheet" href="assets/css/style.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            background: #f0f4fc;
-        }
-        
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4fc; }
         .wrapper { display: flex; min-height: 100vh; }
+        .main-content { margin-left: 260px; padding: 30px; background: #f0f4fc; flex: 1; }
         
-        .main-content {
-            margin-left: 260px;
-            padding: 30px;
-            background: #f0f4fc;
-            flex: 1;
-        }
+        .page-header { margin-bottom: 30px; }
+        .page-header h1 { color: #0b1a33; font-size: 26px; font-weight: 700; margin-bottom: 5px; }
+        .page-header p { color: #5a6f8c; font-size: 14px; }
         
-        /* Page Header */
-        .page-header {
-            margin-bottom: 30px;
-        }
+        .message { padding: 15px 20px; border-radius: 4px; margin-bottom: 25px; font-weight: 600; }
+        .message.success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+        .message.error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
         
-        .page-header h1 {
-            color: #0b1a33;
-            font-size: 26px;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
+        .stats-row { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-mini { background: white; padding: 12px 20px; border-radius: 4px; border-left: 4px solid #0b1a33; display: flex; align-items: center; gap: 15px; }
+        .stat-mini .num { font-size: 22px; font-weight: 700; color: #0b1a33; }
+        .stat-mini .label { color: #5a6f8c; font-size: 12px; }
         
-        .page-header p {
-            color: #5a6f8c;
-            font-size: 14px;
-        }
+        .add-card { background: white; border-radius: 4px; margin-bottom: 30px; box-shadow: 0 2px 10px rgba(11,26,51,0.07); border-left: 4px solid #10b981; overflow: hidden; }
+        .add-card .card-header { background: #f8fafd; padding: 15px 24px; border-bottom: 1px solid #e8edf5; }
+        .add-card .card-header h2 { color: #0b1a33; font-size: 16px; font-weight: 700; margin: 0; }
+        .add-card .card-body { padding: 24px; }
         
-        /* Messages */
-        .message {
-            padding: 15px 20px;
-            border-radius: 4px;
-            margin-bottom: 25px;
-            font-weight: 600;
-        }
-        
-        .message.success {
-            background: #d4edda;
-            color: #155724;
-            border-left: 4px solid #28a745;
-        }
-        
-        .message.error {
-            background: #f8d7da;
-            color: #721c24;
-            border-left: 4px solid #dc3545;
-        }
-        
-        /* Stats Row */
-        .stats-row {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .stat-mini {
-            background: white;
-            padding: 12px 20px;
-            border-radius: 4px;
-            border-left: 4px solid #0b1a33;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .stat-mini .num {
-            font-size: 22px;
-            font-weight: 700;
-            color: #0b1a33;
-        }
-        
-        .stat-mini .label {
-            color: #5a6f8c;
-            font-size: 12px;
-        }
-        
-        /* Add Form Card */
-        .add-card {
-            background: white;
-            border-radius: 4px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 10px rgba(11,26,51,0.07);
-            border-left: 4px solid #10b981;
-            overflow: hidden;
-        }
-        
-        .add-card .card-header {
-            background: #f8fafd;
-            padding: 15px 24px;
-            border-bottom: 1px solid #e8edf5;
-        }
-        
-        .add-card .card-header h2 {
-            color: #0b1a33;
-            font-size: 16px;
-            font-weight: 700;
-            margin: 0;
-        }
-        
-        .add-card .card-body {
-            padding: 24px;
-        }
-        
-        /* Form */
-        .form-grid-2 {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
+        .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-weight: 600; color: #1e3a5f; font-size: 13px; margin-bottom: 5px; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 14px; font-family: inherit; }
+        .form-control:focus { outline: none; border-color: #0b1a33; }
+        select.form-control { background: white; }
         
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            color: #1e3a5f;
-            font-size: 13px;
-            margin-bottom: 5px;
-        }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; font-weight: 600; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; transition: background 0.2s; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-primary { background: #0b1a33; color: white; }
+        .btn-primary:hover { background: #1e3a5f; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #5a6268; }
         
-        .form-control {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #e2e8f0;
-            border-radius: 4px;
-            font-size: 14px;
-            font-family: inherit;
-        }
+        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+        .status-badge.pending { background: #fff3cd; color: #856404; }
+        .status-badge.completed { background: #d1ecf1; color: #0c5460; }
+        .status-badge.cancelled { background: #f8d7da; color: #721c24; }
+        .status-badge.missed { background: #fef2f2; color: #991b1b; }
         
-        .form-control:focus {
-            outline: none;
-            border-color: #0b1a33;
-        }
-        
-        select.form-control {
-            background: white;
-        }
-        
-        /* Buttons */
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: background 0.2s;
-        }
-        
-        .btn-success {
-            background: #10b981;
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background: #059669;
-        }
-        
-        .btn-primary {
-            background: #0b1a33;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #1e3a5f;
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-        
-        /* Status badges */
-        .status-badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        
-        .status-badge.pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .status-badge.confirmed {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .status-badge.completed {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-        
-        .status-badge.cancelled {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        /* Card */
-        .card {
-            background: white;
-            border-radius: 4px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 10px rgba(11,26,51,0.07);
-            overflow: hidden;
-        }
-        
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 24px;
-            background: #f8fafd;
-            border-bottom: 1px solid #e8edf5;
-        }
-        
-        .card-header h2 {
-            color: #0b1a33;
-            font-size: 16px;
-            font-weight: 700;
-            margin: 0;
-        }
-        
-        .card-header .badge {
-            background: #0b1a33;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
+        .card { background: white; border-radius: 4px; margin-bottom: 30px; box-shadow: 0 2px 10px rgba(11,26,51,0.07); overflow: hidden; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 24px; background: #f8fafd; border-bottom: 1px solid #e8edf5; }
+        .card-header h2 { color: #0b1a33; font-size: 16px; font-weight: 700; margin: 0; }
+        .card-header .badge { background: #0b1a33; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
         .card-body { padding: 24px; }
         
-        /* Table */
-        .table-responsive {
-            overflow-x: auto;
-        }
+        .table-responsive { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background: #0b1a33; color: white; padding: 12px 10px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 12px 10px; border-bottom: 1px solid #e8edf5; color: #1e293b; vertical-align: middle; }
+        tr:hover td { background: #f8fafd; }
         
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }
+        .date-cell { font-weight: 600; color: #0b1a33; }
+        .date-cell.today { color: #3b82f6; }
+        .time-cell { font-size: 12px; color: #5a6f8c; }
         
-        th {
-            background: #0b1a33;
-            color: white;
-            padding: 12px 10px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+        .guardian-name { font-weight: 500; color: #0b1a33; }
+        .guardian-type { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; margin-top: 3px; }
+        .guardian-type.mother { background: #fce7f3; color: #9d174d; }
+        .guardian-type.father { background: #e6f0ff; color: #1e40af; }
+        .guardian-type.guardian { background: #fff3cd; color: #856404; }
         
-        td {
-            padding: 12px 10px;
-            border-bottom: 1px solid #e8edf5;
-            color: #1e293b;
-            vertical-align: middle;
-        }
+        .doctor-type { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; margin-left: 5px; }
+        .doctor-type.immunization { background: #e6f0ff; color: #0b1a33; }
+        .doctor-type.specialist { background: #f3e8ff; color: #6b21a8; }
         
-        tr:hover td {
-            background: #f8fafd;
-        }
+        .action-group { display: flex; gap: 4px; flex-wrap: wrap; }
+        .action-btn { padding: 5px 10px; text-decoration: none; color: white; font-size: 11px; font-weight: 600; border-radius: 3px; display: inline-block; white-space: nowrap; }
+        .btn-complete { background: #10b981; }
+        .btn-complete:hover { background: #059669; }
+        .btn-reschedule { background: #3b82f6; }
+        .btn-reschedule:hover { background: #2563eb; }
+        .no-actions { color: #5a6f8c; font-size: 11px; font-style: italic; text-align: center; }
         
-        .date-cell {
-            font-weight: 600;
-            color: #0b1a33;
-        }
-        
-        .date-cell.today {
-            color: #3b82f6;
-        }
-        
-        .time-cell {
-            font-size: 12px;
-            color: #5a6f8c;
-        }
-        
-        .guardian-name {
-            font-weight: 500;
-            color: #0b1a33;
-        }
-        
-        .guardian-type {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
-            font-weight: 600;
-            margin-top: 3px;
-        }
-        
-        .guardian-type.mother {
-            background: #fce7f3;
-            color: #9d174d;
-        }
-        
-        .guardian-type.father {
-            background: #e6f0ff;
-            color: #1e40af;
-        }
-        
-        .guardian-type.guardian {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .doctor-type {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
-            font-weight: 600;
-            margin-left: 5px;
-        }
-        
-        .doctor-type.immunization {
-            background: #e6f0ff;
-            color: #0b1a33;
-        }
-        
-        .doctor-type.specialist {
-            background: #f3e8ff;
-            color: #6b21a8;
-        }
-        
-        /* Action buttons */
-        .action-group {
-            display: flex;
-            gap: 4px;
-            flex-wrap: wrap;
-        }
-        
-        .action-btn {
-            padding: 5px 10px;
-            text-decoration: none;
-            color: white;
-            font-size: 11px;
-            font-weight: 600;
-            border-radius: 3px;
-            display: inline-block;
-            white-space: nowrap;
-        }
-        
-        .btn-confirm {
-            background: #10b981;
-        }
-        
-        .btn-confirm:hover {
-            background: #059669;
-        }
-        
-        .btn-complete {
-            background: #10b981;
-        }
-        
-        .btn-complete:hover {
-            background: #059669;
-        }
-        
-        .btn-cancel {
-            background: #f59e0b;
-        }
-        
-        .btn-cancel:hover {
-            background: #d97706;
-        }
-        
-        .btn-reschedule {
-            background: #3b82f6;
-        }
-        
-        .btn-reschedule:hover {
-            background: #2563eb;
-        }
-        
-        .btn-delete {
-            background: #dc3545;
-        }
-        
-        .btn-delete:hover {
-            background: #c82333;
-        }
-        
-        .no-actions {
-            color: #5a6f8c;
-            font-size: 11px;
-            font-style: italic;
-            text-align: center;
-        }
-        
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-        }
-        
-        .modal-content {
-            background: white;
-            margin: 10% auto;
-            padding: 30px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 500px;
-            border-left: 4px solid #3b82f6;
-        }
-        
-        .modal-header {
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 20px;
-            color: #0b1a33;
-        }
-        
-        .modal-close {
-            float: right;
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-            color: #5a6f8c;
-        }
-        
-        .modal-close:hover {
-            color: #0b1a33;
-        }
-        
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+        .modal-content { background: white; margin: 10% auto; padding: 30px; border-radius: 8px; width: 90%; max-width: 500px; border-left: 4px solid #3b82f6; }
+        .modal-header { font-size: 18px; font-weight: 700; margin-bottom: 20px; color: #0b1a33; }
+        .modal-close { float: right; font-size: 24px; font-weight: bold; cursor: pointer; color: #5a6f8c; }
+        .modal-close:hover { color: #0b1a33; }
     </style>
 </head>
 <body>
 <div class="wrapper">
     
-    <!-- SIDEBAR -->
     <div class="sidebar">
         <div class="sidebar-header">
             <h2>PCASS</h2>
@@ -658,7 +273,6 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
         </div>
     </div>
     
-    <!-- MAIN CONTENT -->
     <div class="main-content">
         
         <div class="page-header">
@@ -666,42 +280,20 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
             <p>Schedule and manage all appointments</p>
         </div>
         
-        <!-- Message Display -->
         <?php if ($message): ?>
-            <div class="message <?= $msg_type ?>">
-                <?= $msg_type == 'success' ? '✓' : '⚠' ?> <?= htmlspecialchars($message) ?>
-            </div>
+            <div class="message <?= $msg_type ?>"><?= $msg_type == 'success' ? '✓' : '⚠' ?> <?= htmlspecialchars($message) ?></div>
         <?php endif; ?>
         
-        <!-- Mini Stats Row -->
         <div class="stats-row">
-            <div class="stat-mini">
-                <span class="num"><?= $total ?></span>
-                <span class="label">Total</span>
-            </div>
-            <div class="stat-mini">
-                <span class="num"><?= $pending ?></span>
-                <span class="label">Pending</span>
-            </div>
-            <div class="stat-mini">
-                <span class="num"><?= $confirmed ?></span>
-                <span class="label">Confirmed</span>
-            </div>
-            <div class="stat-mini">
-                <span class="num"><?= $completed ?></span>
-                <span class="label">Completed</span>
-            </div>
-            <div class="stat-mini">
-                <span class="num"><?= $cancelled ?></span>
-                <span class="label">Cancelled</span>
-            </div>
+            <div class="stat-mini"><span class="num"><?= $total ?></span><span class="label">Total</span></div>
+            <div class="stat-mini"><span class="num"><?= $pending ?></span><span class="label">Pending</span></div>
+            <div class="stat-mini"><span class="num"><?= $completed ?></span><span class="label">Completed</span></div>
+            <div class="stat-mini"><span class="num"><?= $cancelled ?></span><span class="label">Cancelled</span></div>
+            <div class="stat-mini"><span class="num"><?= $missed ?></span><span class="label">Missed</span></div>
         </div>
         
-        <!-- ADD APPOINTMENT FORM -->
         <div class="add-card">
-            <div class="card-header">
-                <h2>Schedule New Appointment</h2>
-            </div>
+            <div class="card-header"><h2>Schedule New Appointment</h2></div>
             <div class="card-body">
                 <form method="POST">
                     <div class="form-grid-2">
@@ -710,14 +302,10 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
                             <select name="child_id" class="form-control" required>
                                 <option value="">-- Select Child --</option>
                                 <?php while ($c = $children->fetch_assoc()): ?>
-                                    <option value="<?= $c['child_id'] ?>">
-                                        <?= htmlspecialchars($c['first_name'] . ' ' . $c['last_name']) ?> 
-                                        (Guardian: <?= htmlspecialchars($c['guardian_name'] ?? 'N/A') ?>)
-                                    </option>
+                                    <option value="<?= $c['child_id'] ?>"><?= htmlspecialchars($c['first_name'] . ' ' . $c['last_name']) ?> (Guardian: <?= htmlspecialchars($c['guardian_name'] ?? 'N/A') ?>)</option>
                                 <?php endwhile; ?>
                             </select>
                         </div>
-                        
                         <div class="form-group">
                             <label>Select Doctor *</label>
                             <select name="doctor_id" class="form-control" required>
@@ -725,67 +313,43 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
                                 <?php while ($d = $doctors->fetch_assoc()): 
                                     $type = $d['doctor_role'] == 'specialist' ? 'Specialist' : 'Immunization';
                                 ?>
-                                    <option value="<?= $d['doctor_id'] ?>">
-                                        Dr. <?= htmlspecialchars($d['full_name']) ?> (<?= $type ?>)
-                                        <?php if (!empty($d['specialization'])): ?> - <?= htmlspecialchars($d['specialization']) ?><?php endif; ?>
-                                    </option>
+                                    <option value="<?= $d['doctor_id'] ?>">Dr. <?= htmlspecialchars($d['full_name']) ?> (<?= $type ?>)<?php if (!empty($d['specialization'])): ?> - <?= htmlspecialchars($d['specialization']) ?><?php endif; ?></option>
                                 <?php endwhile; ?>
                             </select>
                         </div>
                     </div>
-                    
                     <div class="form-grid-2">
-                        <div class="form-group">
-                            <label>Date *</label>
-                            <input type="date" name="appointment_date" class="form-control" min="<?= date('Y-m-d') ?>" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Time *</label>
-                            <input type="time" name="appointment_time" class="form-control" required>
-                        </div>
+                        <div class="form-group"><label>Date *</label><input type="date" name="appointment_date" class="form-control" min="<?= date('Y-m-d') ?>" required></div>
+                        <div class="form-group"><label>Time *</label><input type="time" name="appointment_time" class="form-control" required></div>
                     </div>
-                    
-                    <div class="form-group">
-                        <label>Notes (Optional)</label>
-                        <textarea name="notes" class="form-control" rows="2" placeholder="Any special instructions..."></textarea>
-                    </div>
-                    
+                    <div class="form-group"><label>Notes (Optional)</label><textarea name="notes" class="form-control" rows="2" placeholder="Any special instructions..."></textarea></div>
                     <button type="submit" name="add_appointment" class="btn btn-success">Schedule Appointment</button>
                 </form>
             </div>
         </div>
         
-        <!-- Appointments List -->
         <div class="card">
-            <div class="card-header">
-                <h2>All Appointments</h2>
-                <span class="badge"><?= $appointments->num_rows ?> total</span>
-            </div>
+            <div class="card-header"><h2>All Appointments</h2><span class="badge"><?= $appointments->num_rows ?> total</span></div>
             <div class="card-body">
                 <div class="table-responsive">
                     <?php if ($appointments->num_rows > 0): ?>
                         <table>
                             <thead>
-                                <tr>
-                                    <th>Date & Time</th>
-                                    <th>Child</th>
-                                    <th>Guardian/Parent</th>
-                                    <th>Doctor</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
+                                <tr><th>Date & Time</th><th>Child</th><th>Guardian/Parent</th><th>Doctor</th><th>Status</th><th>Actions</th></tr>
                             </thead>
                             <tbody>
                                 <?php 
                                 $appointments->data_seek(0);
                                 while ($a = $appointments->fetch_assoc()): 
                                     $is_today = ($a['appointment_date'] == $today);
+                                    $appointment_datetime = strtotime($a['appointment_date'] . ' ' . $a['appointment_time']);
+                                    $current_datetime = time();
+                                    $is_past = ($appointment_datetime < $current_datetime);
+                                    
                                     $doctor_type = $a['doctor_role'] ?? 'immunization';
                                     $type_class = $doctor_type == 'specialist' ? 'specialist' : 'immunization';
                                     $type_label = $doctor_type == 'specialist' ? 'Specialist' : 'Immunization';
                                     
-                                    // Determine guardian type
                                     $guardian_type = '';
                                     $guardian_type_class = '';
                                     $guardian_display_name = $a['guardian_name'] ?? 'N/A';
@@ -805,91 +369,23 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
                                     }
                                 ?>
                                 <tr>
+                                    <td><div class="date-cell <?= $is_today ? 'today' : '' ?>"><?= date('M d, Y', strtotime($a['appointment_date'])) ?></div><div class="time-cell"><?= date('g:i A', strtotime($a['appointment_time'])) ?></div></td>
+                                    <td><strong><?= htmlspecialchars($a['child_first'] . ' ' . $a['child_last']) ?></strong></td>
+                                    <td><div class="guardian-name"><?= htmlspecialchars($guardian_display_name) ?></div><?php if ($guardian_type): ?><span class="guardian-type <?= $guardian_type_class ?>"><?= $guardian_type ?></span><?php endif; ?></td>
+                                    <td><div>Dr. <?= htmlspecialchars($a['doctor_name'] ?? 'Not assigned') ?></div><div><span class="doctor-type <?= $type_class ?>"><?= $type_label ?></span><?php if (!empty($a['specialization'])): ?><span style="font-size:11px; color:#5a6f8c;"> - <?= htmlspecialchars($a['specialization']) ?></span><?php endif; ?></div></td>
+                                    <td><span class="status-badge <?= strtolower($a['status']) ?>"><?= $a['status'] ?></span></td>
                                     <td>
-                                        <div class="date-cell <?= $is_today ? 'today' : '' ?>">
-                                            <?= date('M d, Y', strtotime($a['appointment_date'])) ?>
-                                        </div>
-                                        <div class="time-cell">
-                                            <?= date('g:i A', strtotime($a['appointment_time'])) ?>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <strong><?= htmlspecialchars($a['child_first'] . ' ' . $a['child_last']) ?></strong>
-                                    </td>
-                                    <td>
-                                        <div class="guardian-name"><?= htmlspecialchars($guardian_display_name) ?></div>
-                                        <?php if ($guardian_type): ?>
-                                            <span class="guardian-type <?= $guardian_type_class ?>">
-                                                <?= $guardian_type ?>
-                                            </span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <div>Dr. <?= htmlspecialchars($a['doctor_name'] ?? 'Not assigned') ?></div>
-                                        <div>
-                                            <span class="doctor-type <?= $type_class ?>">
-                                                <?= $type_label ?>
-                                            </span>
-                                            <?php if (!empty($a['specialization'])): ?>
-                                                <span style="font-size:11px; color:#5a6f8c;"> - <?= htmlspecialchars($a['specialization']) ?></span>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="status-badge <?= strtolower($a['status']) ?>">
-                                            <?= $a['status'] ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <?php if ($a['status'] == 'Pending'): ?>
+                                        <?php if ($a['status'] == 'Pending' && !$is_past): ?>
                                             <div class="action-group">
-                                                <a href="?update_status=<?= $a['appointment_id'] ?>&status=Confirmed" 
-                                                   class="action-btn btn-confirm" 
-                                                   onclick="return confirm('Confirm this appointment?')">
-                                                    Confirm
-                                                </a>
-                                                <a href="?update_status=<?= $a['appointment_id'] ?>&status=Cancelled" 
-                                                   class="action-btn btn-cancel" 
-                                                   onclick="return confirm('Cancel this appointment?')">
-                                                    Cancel
-                                                </a>
-                                                <a href="?reschedule=<?= $a['appointment_id'] ?>" 
-                                                   class="action-btn btn-reschedule">
-                                                    Reschedule
-                                                </a>
-                                                <a href="?delete=<?= $a['appointment_id'] ?>" 
-                                                   class="action-btn btn-delete" 
-                                                   onclick="return confirm('Delete this appointment? This action cannot be undone.')">
-                                                    Delete
-                                                </a>
+                                                <a href="?update_status=<?= $a['appointment_id'] ?>&status=Completed" class="action-btn btn-complete" onclick="return confirm('Mark this appointment as completed? Patient was seen.')">Complete</a>
+                                                <a href="?reschedule=<?= $a['appointment_id'] ?>" class="action-btn btn-reschedule">Reschedule</a>
                                             </div>
-                                            
-                                        <?php elseif ($a['status'] == 'Confirmed'): ?>
+                                        <?php elseif ($a['status'] == 'Missed'): ?>
                                             <div class="action-group">
-                                                <a href="?update_status=<?= $a['appointment_id'] ?>&status=Completed" 
-                                                   class="action-btn btn-complete" 
-                                                   onclick="return confirm('Mark as completed?')">
-                                                    Complete
-                                                </a>
-                                                <a href="?update_status=<?= $a['appointment_id'] ?>&status=Cancelled" 
-                                                   class="action-btn btn-cancel" 
-                                                   onclick="return confirm('Cancel this appointment?')">
-                                                    Cancel
-                                                </a>
-                                                <a href="?reschedule=<?= $a['appointment_id'] ?>" 
-                                                   class="action-btn btn-reschedule">
-                                                    Reschedule
-                                                </a>
-                                                <a href="?delete=<?= $a['appointment_id'] ?>" 
-                                                   class="action-btn btn-delete" 
-                                                   onclick="return confirm('Delete this appointment? This action cannot be undone.')">
-                                                    Delete
-                                                </a>
+                                                <a href="?reschedule=<?= $a['appointment_id'] ?>" class="action-btn btn-reschedule">Reschedule</a>
                                             </div>
-                                            
-                                        <?php elseif ($a['status'] == 'Completed' || $a['status'] == 'Cancelled'): ?>
+                                        <?php else: ?>
                                             <div class="no-actions">—</div>
-                                            
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -897,41 +393,22 @@ $doctors = $conn->query("SELECT doctor_id, full_name, doctor_role, specializatio
                             </tbody>
                         </table>
                     <?php else: ?>
-                        <div style="text-align: center; padding: 60px; color: #5a6f8c;">
-                            No appointments found.
-                        </div>
+                        <div style="text-align: center; padding: 60px; color: #5a6f8c;">No appointments found.</div>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
         
-        <!-- Reschedule Modal -->
         <?php if ($reschedule): ?>
         <div id="rescheduleModal" class="modal" style="display: block;">
             <div class="modal-content">
                 <a href="manage_appointments.php" class="modal-close">&times;</a>
                 <div class="modal-header">Reschedule Appointment</div>
-                
                 <form method="POST">
                     <input type="hidden" name="appointment_id" value="<?= $reschedule['appointment_id'] ?>">
-                    
-                    <div class="form-group">
-                        <label>New Date *</label>
-                        <input type="date" name="new_date" class="form-control" 
-                               value="<?= $reschedule['appointment_date'] ?>" 
-                               min="<?= date('Y-m-d') ?>" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>New Time *</label>
-                        <input type="time" name="new_time" class="form-control" 
-                               value="<?= $reschedule['appointment_time'] ?>" required>
-                    </div>
-                    
-                    <div style="display: flex; gap: 10px; margin-top: 20px;">
-                        <button type="submit" name="reschedule_appointment" class="btn btn-primary">Update Schedule</button>
-                        <a href="manage_appointments.php" class="btn btn-secondary">Cancel</a>
-                    </div>
+                    <div class="form-group"><label>New Date *</label><input type="date" name="new_date" class="form-control" value="<?= $reschedule['appointment_date'] ?>" min="<?= date('Y-m-d') ?>" required></div>
+                    <div class="form-group"><label>New Time *</label><input type="time" name="new_time" class="form-control" value="<?= $reschedule['appointment_time'] ?>" required></div>
+                    <div style="display: flex; gap: 10px; margin-top: 20px;"><button type="submit" name="reschedule_appointment" class="btn btn-primary">Update Schedule</button><a href="manage_appointments.php" class="btn btn-secondary">Cancel</a></div>
                 </form>
             </div>
         </div>
