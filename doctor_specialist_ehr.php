@@ -43,6 +43,21 @@ if ($flag_id) {
 }
 
 // ============================================
+// CONSULTATION MODE - Check if specialist can add assessment
+// ============================================
+$today_date = date('Y-m-d');
+$has_appointment_today = $conn->query("
+    SELECT appointment_id, appointment_time
+    FROM appointments 
+    WHERE child_id = $child_id 
+    AND doctor_id = $doctor_id 
+    AND appointment_date = '$today_date'
+    AND status = 'Pending'
+")->num_rows > 0;
+
+$can_assess = ($has_appointment_today || ($flag && $flag['status'] == 'new'));
+
+// ============================================
 // FETCH MILESTONE DEFINITIONS FROM DATABASE
 // ============================================
 $milestone_defs = $conn->query("
@@ -140,9 +155,11 @@ while ($t = $child_teeth->fetch_assoc()) {
 
 // Previous assessments
 $assessments = $conn->query("
-    SELECT * FROM specialist_reviews 
-    WHERE child_id = $child_id 
-    ORDER BY review_date DESC
+    SELECT sr.*, d.full_name as doctor_name
+    FROM specialist_reviews sr
+    LEFT JOIN doctors d ON sr.doctor_id = d.doctor_id
+    WHERE sr.child_id = $child_id 
+    ORDER BY sr.review_date DESC
 ");
 
 // Lab results
@@ -158,9 +175,9 @@ $labs = $conn->query("
 $growth_history = $conn->query("SELECT * FROM growth_records WHERE child_id = $child_id ORDER BY record_date DESC");
 
 // ============================================
-// HANDLE ASSESSMENT SUBMISSION
+// HANDLE ASSESSMENT SUBMISSION (only if can assess)
 // ============================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_assessment'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_assessment']) && $can_assess) {
     $diagnosis = $_POST['diagnosis'];
     $clinical_notes = $_POST['clinical_notes'];
     $treatment_plan = $_POST['treatment_plan'];
@@ -168,11 +185,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_assessment'])) {
     $referrals = $_POST['referrals'] ?? '';
     $follow_up_date = $_POST['follow_up_date'] ?: null;
     
-    // Start transaction
     $conn->begin_transaction();
     
     try {
-        // Insert into specialist_reviews
         $stmt = $conn->prepare("
             INSERT INTO specialist_reviews 
             (child_id, flag_id, doctor_id, diagnosis, diagnosis_notes, treatment_plan, lab_orders, referrals, follow_up_date, status) 
@@ -183,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_assessment'])) {
         $review_id = $stmt->insert_id;
         $stmt->close();
         
-        // Save prescriptions to prescriptions table
+        // Save prescriptions
         if (isset($_POST['med_name']) && is_array($_POST['med_name'])) {
             $presc_stmt = $conn->prepare("
                 INSERT INTO prescriptions 
@@ -225,6 +240,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_assessment'])) {
         $msg_type = "success";
         $active_tab = 'overview';
         
+        // Refresh flag status
+        if ($flag_id) {
+            $flag = $conn->query("
+                SELECT f.*, d.full_name as flagged_by_name
+                FROM flags f
+                LEFT JOIN doctors d ON f.flagged_by = d.doctor_id
+                WHERE f.flag_id = $flag_id
+            ")->fetch_assoc();
+        }
+        
     } catch (Exception $e) {
         $conn->rollback();
         $message = "Error saving assessment: " . $e->getMessage();
@@ -232,8 +257,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_assessment'])) {
     }
 }
 
-// Handle lab result upload
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lab_results'])) {
+// Handle lab result upload (only if can assess)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lab_results']) && $can_assess) {
     $test_names = $_POST['test_name'] ?? [];
     $test_dates = $_POST['test_date'] ?? [];
     $result_values = $_POST['result_value'] ?? [];
@@ -281,6 +306,22 @@ foreach ($milestone_data as $num => $data) {
         $delays[] = $data['description'] . " (by " . $data['expected_range'] . ")";
     }
 }
+
+// Get mode badge text
+$mode_text = "";
+$mode_class = "";
+if ($can_assess) {
+    if ($has_appointment_today) {
+        $mode_text = "Consultation Mode";
+        $mode_class = "mode-edit";
+    } elseif ($flag && $flag['status'] == 'new') {
+        $mode_text = "Review Mode";
+        $mode_class = "mode-flag";
+    }
+} else {
+    $mode_text = "View Only";
+    $mode_class = "mode-view";
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -299,7 +340,20 @@ foreach ($milestone_data as $num => $data) {
         .child-name { font-size:28px; font-weight:700; color:#0b1a33; }
         .child-info { color:#5a6f8c; margin-top:5px; font-size:14px; }
         
+        .mode-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 15px;
+        }
+        .mode-edit { background: #d4edda; color: #155724; }
+        .mode-view { background: #e2e8f0; color: #4a5568; }
+        .mode-flag { background: #fef3c7; color: #92400e; }
+        
         .flag-box { background:#fee2e2; padding:15px; margin-bottom:20px; border-left:4px solid #dc2626; }
+        .consultation-box { background:#d4edda; padding:15px; margin-bottom:20px; border-left:4px solid #28a745; }
         
         .tabs { display:flex; gap:10px; margin-bottom:25px; border-bottom:2px solid #e2e8f0; padding-bottom:10px; flex-wrap:wrap; }
         .tab { padding:10px 20px; background:none; border:none; cursor:pointer; font-size:16px; color:#5a6f8c; text-decoration:none; }
@@ -328,7 +382,6 @@ foreach ($milestone_data as $num => $data) {
         .btn-success { background:#10b981; }
         .btn-success:hover { background:#059669; }
         .btn-sm { background:#0b1a33; color:white; padding:5px 12px; border:none; border-radius:4px; font-size:12px; cursor:pointer; }
-        .btn-remove { background:#dc2626; color:white; padding:2px 8px; border:none; border-radius:4px; cursor:pointer; float:right; }
         
         .alert { padding:15px; margin-bottom:20px; border-radius:6px; }
         .alert.success { background:#d4edda; color:#155724; border-left:4px solid #28a745; }
@@ -349,13 +402,8 @@ foreach ($milestone_data as $num => $data) {
         .badge.pending { background:#fff3cd; color:#856404; }
         .badge.delayed { background:#fee2e2; color:#dc2626; }
         
-        .checkbox-col { width:40px; }
         .chart-container { height:250px; margin-bottom:30px; }
         .delay-box { margin-top:20px; padding:15px; background:#fee2e2; border-left:4px solid #dc2626; }
-        
-        .prescription-row { background:#f8fafd; padding:15px; margin-bottom:15px; border-left:4px solid #0b1a33; }
-        .lab-row { background:#f8fafd; padding:15px; margin-bottom:15px; border-left:4px solid #0b1a33; }
-        
         .med-item { background:#f8fafd; padding:10px; margin-bottom:8px; border-left:3px solid #0b1a33; }
     </style>
 </head>
@@ -379,25 +427,38 @@ foreach ($milestone_data as $num => $data) {
     </div>
     
     <div class="main">
-        <a href="doctor_specialist_patients.php" class="back-link">← Back to Patients</a>
+        <a href="doctor_specialist_patients.php" class="back-link">Back to Patients</a>
         
-        <!-- Child Header -->
+        <!-- Child Header with Mode Badge -->
         <div class="child-header">
             <div>
-                <div class="child-name"><?= htmlspecialchars($child['first_name'] . ' ' . $child['last_name']) ?></div>
+                <div class="child-name">
+                    <?= htmlspecialchars($child['first_name'] . ' ' . $child['last_name']) ?>
+                    <span class="mode-badge <?= $mode_class ?>"><?= $mode_text ?></span>
+                </div>
                 <div class="child-info">
                     Age: <?= $age_years ?> years (<?= $age_months ?> months) • 
                     DOB: <?= $child['date_of_birth'] ?> • 
                     Gender: <?= $child['gender'] ?> 
                 </div>
             </div>
-            <?php if ($flag): ?>
-            <div style="margin-top:15px; padding:10px; background:#fee2e2; border-left:4px solid #dc2626;">
-                <strong>Flag Reason:</strong> <?= htmlspecialchars($flag['reason']) ?><br>
-                <small>Flagged by: <?= htmlspecialchars($flag['flagged_by_name'] ?? 'System') ?> on <?= date('M d, Y', strtotime($flag['created_at'])) ?></small>
-            </div>
-            <?php endif; ?>
         </div>
+        
+        <!-- Flag Box (if flag exists and not resolved) -->
+        <?php if ($flag && $flag['status'] == 'new'): ?>
+        <div class="flag-box">
+            <strong>Flag Reason:</strong> <?= htmlspecialchars($flag['reason']) ?><br>
+            <small>Flagged by: <?= htmlspecialchars($flag['flagged_by_name'] ?? 'System') ?> on <?= date('M d, Y', strtotime($flag['created_at'])) ?></small>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Consultation Mode Box (if appointment today) -->
+        <?php if ($has_appointment_today): ?>
+        <div class="consultation-box">
+            <strong>Consultation Mode Active</strong><br>
+            You have an appointment with this patient today.
+        </div>
+        <?php endif; ?>
         
         <?php if (isset($message)): ?>
         <div class="alert <?= $msg_type ?>"><?= $message ?></div>
@@ -495,56 +556,56 @@ foreach ($milestone_data as $num => $data) {
         </div>
         
         <!-- VACCINES TAB -->
-        <div id="tab-vaccines" class="tab-content <?= $active_tab == 'vaccines' ? 'active' : '' ?>">
-            <div class="section">
-                <h2>Vaccine History</h2>
-                
-                <?php if ($completed_vaccines->num_rows > 0): ?>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Vaccine</th>
-                            <th>Dose</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($rec = $completed_vaccines->fetch_assoc()): ?>
-                        <tr>
-                            <td><?= date('M d, Y', strtotime($rec['date_administered'])) ?></td>
-                            <td><?= htmlspecialchars($rec['vaccine_name']) ?></td>
-                            <td>Dose <?= $rec['dose_number'] ?></td>
-                        </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-                <?php else: ?>
-                <p>No vaccine records yet.</p>
-                <?php endif; ?>
-                
-                <?php if (!empty($due_vaccines)): ?>
-                <h3 style="margin:20px 0 10px;">Due Vaccines</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Vaccine</th>
-                            <th>Dose</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($due_vaccines as $vax): ?>
-                        <tr>
-                            <td><?= htmlspecialchars($vax['vaccine_name']) ?></td>
-                            <td>Dose <?= $vax['dose_number'] ?></td>
-                            <td><span class="badge <?= $vax['status'] ?>"><?= $vax['status'] ?></span></td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-                <?php endif; ?>
-            </div>
-        </div>
+<div id="tab-vaccines" class="tab-content <?= $active_tab == 'vaccines' ? 'active' : '' ?>">
+    <div class="section">
+        <h2>Vaccine History</h2>
+        
+        <?php if ($completed_vaccines->num_rows > 0): ?>
+        <table style="width:100%; margin-bottom:30px;">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Vaccine</th>
+                    <th>Dose</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php while ($rec = $completed_vaccines->fetch_assoc()): ?>
+                <tr>
+                    <td><?= date('M d, Y', strtotime($rec['date_administered'])) ?></td>
+                    <td><?= htmlspecialchars($rec['vaccine_name']) ?></td>
+                    <td>Dose <?= $rec['dose_number'] ?></td>
+                </tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+        <?php else: ?>
+        <p>No vaccine records yet.</p>
+        <?php endif; ?>
+        
+        <?php if (!empty($due_vaccines)): ?>
+        <h3 style="margin:20px 0 10px;">Due Vaccines</h3>
+        <table style="width:100%;">
+            <thead>
+                <tr>
+                    <th>Vaccine</th>
+                    <th>Dose</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($due_vaccines as $vax): ?>
+                <tr>
+                    <td><?= htmlspecialchars($vax['vaccine_name']) ?></td>
+                    <td>Dose <?= $vax['dose_number'] ?></td>
+                    <td><span class="badge <?= $vax['status'] ?>"><?= $vax['status'] ?></span></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+    </div>
+</div>
         
         <!-- DEVELOPMENT TAB -->
         <div id="tab-development" class="tab-content <?= $active_tab == 'development' ? 'active' : '' ?>">
@@ -595,7 +656,6 @@ foreach ($milestone_data as $num => $data) {
             </div>
             <?php endif; ?>
             
-            <!-- Teeth -->
             <div class="section">
                 <h2>Teeth Development</h2>
                 <div class="grid-4">
@@ -616,6 +676,8 @@ foreach ($milestone_data as $num => $data) {
         
         <!-- ASSESSMENT TAB -->
         <div id="tab-assessment" class="tab-content <?= $active_tab == 'assessment' ? 'active' : '' ?>">
+            
+            <?php if ($can_assess): ?>
             <div class="section">
                 <h2>New Assessment</h2>
                 <form method="POST">
@@ -637,7 +699,7 @@ foreach ($milestone_data as $num => $data) {
                     <div class="section-header">Lab Orders</div>
                     <div class="form-group">
                         <label>Tests to Order</label>
-                        <textarea name="lab_orders" class="form-control" rows="3" placeholder="• Complete Blood Count&#10;• Iron Studies&#10;• Thyroid Function Test"></textarea>
+                        <textarea name="lab_orders" class="form-control" rows="3" placeholder="Complete Blood Count&#10;Iron Studies&#10;Thyroid Function Test"></textarea>
                     </div>
                     
                     <div class="section-header">Prescriptions</div>
@@ -686,6 +748,14 @@ foreach ($milestone_data as $num => $data) {
                     <button type="submit" name="save_assessment" class="btn">Save Assessment</button>
                 </form>
             </div>
+            <?php else: ?>
+            <div class="section">
+                <h2>New Assessment</h2>
+                <div class="info-box" style="background:#f8fafd;">
+                    <p>To add a new assessment, please ensure there is a scheduled appointment.</p>
+                </div>
+            </div>
+            <?php endif; ?>
             
             <!-- Previous Assessments -->
             <?php if ($assessments->num_rows > 0): ?>
@@ -694,7 +764,6 @@ foreach ($milestone_data as $num => $data) {
                 <?php 
                 $assessments->data_seek(0);
                 while ($a = $assessments->fetch_assoc()): 
-                    // Get prescriptions for this assessment
                     $review_prescriptions = $conn->query("
                         SELECT * FROM prescriptions 
                         WHERE review_id = " . $a['review_id'] . "
@@ -743,6 +812,7 @@ foreach ($milestone_data as $num => $data) {
         
         <!-- LABS TAB -->
         <div id="tab-labs" class="tab-content <?= $active_tab == 'labs' ? 'active' : '' ?>">
+            <?php if ($can_assess): ?>
             <div class="section">
                 <h2>Add Lab Results</h2>
                 <form method="POST" enctype="multipart/form-data">
@@ -779,6 +849,14 @@ foreach ($milestone_data as $num => $data) {
                     <button type="submit" name="save_lab_results" class="btn btn-success">Save All Lab Results</button>
                 </form>
             </div>
+            <?php else: ?>
+            <div class="section">
+                <h2>Add Lab Results</h2>
+                <div class="info-box" style="background:#f8fafd;">
+                    <p>To add lab results, please ensure there is a scheduled appointment.</p>
+                </div>
+            </div>
+            <?php endif; ?>
             
             <div class="section">
                 <h2>Previous Lab Results</h2>

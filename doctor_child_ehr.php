@@ -32,6 +32,39 @@ $age_remaining_months = $age_months % 12;
 $age_weeks = floor($dob->diff($today)->days / 7);
 
 // ============================================
+// EDIT WINDOW: 2 hours before to 2 hours after appointment
+// ============================================
+$can_edit = false;
+$today_date = date('Y-m-d');
+
+$appointment_check = $conn->query("
+    SELECT appointment_id, appointment_date, appointment_time, status
+    FROM appointments 
+    WHERE child_id = $child_id 
+    AND doctor_id = $doctor_id 
+    AND status != 'Completed'
+    AND appointment_date = '$today_date'
+    ORDER BY appointment_time ASC
+    LIMIT 1
+");
+
+if ($appointment_check && $appointment_check->num_rows > 0) {
+    $can_edit_query = $conn->query("
+        SELECT appointment_id 
+        FROM appointments 
+        WHERE child_id = $child_id 
+        AND doctor_id = $doctor_id 
+        AND status != 'Completed'
+        AND appointment_date = '$today_date'
+        AND TIMESTAMP(appointment_date, appointment_time) >= NOW() - INTERVAL 2 HOUR
+        AND TIMESTAMP(appointment_date, appointment_time) <= NOW() + INTERVAL 2 HOUR
+        LIMIT 1
+    ");
+    
+    $can_edit = ($can_edit_query && $can_edit_query->num_rows > 0);
+}
+
+// ============================================
 // FETCH MILESTONE DEFINITIONS FROM DATABASE
 // ============================================
 $milestone_defs = $conn->query("
@@ -56,7 +89,7 @@ while ($row = $milestone_defs->fetch_assoc()) {
 // ============================================
 
 // Save vitals
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_vitals'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_vitals']) && $can_edit) {
     $weight = $_POST['weight_kg'];
     $height = $_POST['height_cm'];
     $head = $_POST['head_circumference'] ?: null;
@@ -76,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_vitals'])) {
 }
 
 // Give vaccines
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['give_vaccines'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['give_vaccines']) && $can_edit) {
     $selected = $_POST['vaccine_ids'] ?? [];
     $date_given = $_POST['date_given'] ?? date('Y-m-d');
     
@@ -102,8 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['give_vaccines'])) {
     }
 }
 
-// Save milestones - Updated to use milestone_number
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_milestones'])) {
+// Save milestones
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_milestones']) && $can_edit) {
     $milestone_numbers = $_POST['milestone_number'] ?? [];
     $achieved_vals = $_POST['achieved'] ?? [];
     $achieved_dates = $_POST['achieved_date'] ?? [];
@@ -126,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_milestones'])) {
 }
 
 // Save teeth
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_teeth'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_teeth']) && $can_edit) {
     $tooth_ids = $_POST['tooth_id'] ?? [];
     $emerged_dates = $_POST['emerged_date'] ?? [];
     
@@ -243,6 +276,17 @@ foreach ($milestone_data as $num => $data) {
         .child-name { font-size:28px; font-weight:700; color:#0b1a33; }
         .child-info { color:#5a6f8c; margin-top:5px; font-size:14px; }
         
+        .mode-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 15px;
+        }
+        .mode-edit { background: #d4edda; color: #155724; }
+        .mode-view { background: #e2e8f0; color: #4a5568; }
+        
         .tabs { display:flex; gap:10px; margin-bottom:25px; border-bottom:2px solid #e2e8f0; padding-bottom:10px; }
         .tab { padding:10px 20px; background:none; border:none; cursor:pointer; font-size:16px; color:#5a6f8c; text-decoration:none; }
         .tab:hover { background:#e6f0ff; color:#0b1a33; }
@@ -317,12 +361,19 @@ foreach ($milestone_data as $num => $data) {
     </div>
     
     <div class="main">
-        <a href="doctor_immunization_patients.php" class="back-link">← Back to Patients</a>
+        <a href="doctor_immunization_patients.php" class="back-link">Back to Patients</a>
         
         <!-- Child Header -->
         <div class="child-header">
             <div>
-                <div class="child-name"><?= htmlspecialchars($child['first_name'] . ' ' . $child['last_name']) ?></div>
+                <div class="child-name">
+                    <?= htmlspecialchars($child['first_name'] . ' ' . $child['last_name']) ?>
+                    <?php if ($can_edit): ?>
+                        <span class="mode-badge mode-edit">Edit Mode</span>
+                    <?php else: ?>
+                        <span class="mode-badge mode-view">View Only</span>
+                    <?php endif; ?>
+                </div>
                 <div class="child-info">
                     Age: <?= $age_years ?>y <?= $age_remaining_months ?>m • DOB: <?= $child['date_of_birth'] ?> • <?= $age_weeks ?> weeks
                 </div>
@@ -346,6 +397,7 @@ foreach ($milestone_data as $num => $data) {
             <!-- Vitals -->
             <div class="section">
                 <div class="section-header"><h2>Record Vitals</h2></div>
+                <?php if ($can_edit): ?>
                 <form method="POST">
                     <div class="grid-3">
                         <div class="form-group"><label>Weight (kg) *</label><input type="number" step="0.1" name="weight_kg" class="form-control" required></div>
@@ -355,6 +407,9 @@ foreach ($milestone_data as $num => $data) {
                     <div class="form-group"><label>Notes</label><textarea name="vital_notes" class="form-control" rows="2"></textarea></div>
                     <button type="submit" name="save_vitals" class="btn">Save Vitals</button>
                 </form>
+                <?php else: ?>
+                <p style="color:#5a6f8c; font-style:italic;">Editing available within hours of appointment.</p>
+                <?php endif; ?>
             </div>
             
             <!-- Growth Charts -->
@@ -373,6 +428,7 @@ foreach ($milestone_data as $num => $data) {
                 <?php if (!empty($due_vaccines)): ?>
                 <div style="margin-bottom:30px;">
                     <h3 style="color:#0b1a33; margin-bottom:15px;">Vaccines Due Now</h3>
+                    <?php if ($can_edit): ?>
                     <form method="POST">
                         <table>
                             <thead>
@@ -405,6 +461,9 @@ foreach ($milestone_data as $num => $data) {
                             <button type="submit" name="give_vaccines" class="btn btn-success">Give Selected</button>
                         </div>
                     </form>
+                    <?php else: ?>
+                    <p style="color:#5a6f8c; font-style:italic;">Editing available within hours of appointment.</p>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 
@@ -479,6 +538,7 @@ foreach ($milestone_data as $num => $data) {
                     <h2>Developmental Milestones</h2>
                     <p style="color:#5a6f8c;">Check off milestones as achieved</p>
                 </div>
+                <?php if ($can_edit): ?>
                 <form method="POST">
                     <table style="width:100%;">
                         <thead>
@@ -498,20 +558,47 @@ foreach ($milestone_data as $num => $data) {
                             <tr>
                                 <td class="milestone-checkbox">
                                     <input type="checkbox" name="achieved[<?= $num ?>]" value="1" <?= $checked ?>>
-                                </td>
-                                <td class="milestone-desc"><?= $data['description'] ?></td>
-                                <td><?= $data['expected_range'] ?></td>
-                                <td><?= ucfirst($data['category']) ?></td>
+                                </td
+                                <td class="milestone-desc"><?= $data['description'] ?></td
+                                <td><?= $data['expected_range'] ?></td
+                                <td><?= ucfirst($data['category']) ?></td
                                 <td>
                                     <input type="date" name="achieved_date[<?= $num ?>]" class="form-control" value="<?= $date_val ?>" style="width:140px;">
-                                </td>
-                            </tr>
+                                </td
+                            </tr
                             <input type="hidden" name="milestone_number[]" value="<?= $num ?>">
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                     <button type="submit" name="save_milestones" class="btn" style="margin-top:20px;">Save Milestones</button>
                 </form>
+                <?php else: ?>
+                <table style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th>Milestone</th>
+                            <th style="width:120px;">Normal Limits</th>
+                            <th style="width:100px;">Category</th>
+                            <th style="width:150px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($milestone_data as $num => $data):
+                            $achieved = isset($milestone_map[$num]) && $milestone_map[$num]['achieved'];
+                            $status = $achieved ? 'Achieved' : 'Not yet';
+                            $status_class = $achieved ? 'badge achieved' : 'badge pending';
+                        ?>
+                        <tr>
+                            <td><?= $data['description'] ?></td>
+                            <td><?= $data['expected_range'] ?></td>
+                            <td><?= ucfirst($data['category']) ?></td>
+                            <td><span class="<?= $status_class ?>"><?= $status ?></span></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <p style="color:#5a6f8c; font-style:italic; margin-top:15px;">Editing available within hours of appointment.</p>
+                <?php endif; ?>
             </div>
             
             <!-- Delay Alerts -->
@@ -528,6 +615,7 @@ foreach ($milestone_data as $num => $data) {
             <!-- Teeth -->
             <div class="section">
                 <div class="section-header"><h2>Teeth Development</h2></div>
+                <?php if ($can_edit): ?>
                 <form method="POST">
                     <div class="grid-4">
                         <?php 
@@ -545,6 +633,22 @@ foreach ($milestone_data as $num => $data) {
                     </div>
                     <button type="submit" name="save_teeth" class="btn" style="margin-top:20px;">Save Teeth Records</button>
                 </form>
+                <?php else: ?>
+                <div class="grid-4">
+                    <?php 
+                    $teeth_defs->data_seek(0);
+                    while ($tooth = $teeth_defs->fetch_assoc()): 
+                        $emerged = $teeth_map[$tooth['tooth_id']]['emerged_date'] ?? '';
+                    ?>
+                    <div class="form-group">
+                        <label><?= $tooth['tooth_type'] ?></label>
+                        <div class="form-control" style="background:#f8fafd;"><?= $emerged ? date('M d, Y', strtotime($emerged)) : 'Not yet emerged' ?></div>
+                        <small style="color:#5a6f8c;">Expected: <?= $tooth['expected_age_min'] ?>-<?= $tooth['expected_age_max'] ?> mo</small>
+                    </div>
+                    <?php endwhile; ?>
+                </div>
+                <p style="color:#5a6f8c; font-style:italic; margin-top:15px;">Editing available within hours of appointment.</p>
+                <?php endif; ?>
                 
                 <?php
                 $emerged_count = 0;
@@ -591,3 +695,4 @@ new Chart(document.getElementById('heightChart'), {
 </script>
 </body>
 </html>
+<?php $conn->close(); ?>

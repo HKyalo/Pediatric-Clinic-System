@@ -145,7 +145,7 @@ $recent = $conn->query("
                     <tr>
                         <td><?= date('g:i A', strtotime($apt['appointment_time'])) ?></td>
                         <td><?= htmlspecialchars($apt['first_name'] . ' ' . $apt['last_name']) ?></td>
-                        <td><a href="doctor_vaccines.php?child_id=<?= $apt['child_id'] ?>" class="btn-sm">Vaccines</a></td>
+                        <td><a href="doctor_child_ehr.php?child_id=<?= $apt['child_id'] ?>" class="btn-sm">Vaccines</a></td>
                     </tr>
                     <?php endwhile; ?>
                 </tbody>

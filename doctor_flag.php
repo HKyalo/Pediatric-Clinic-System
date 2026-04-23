@@ -1,12 +1,8 @@
 <?php
-// Set session to last 24 hours 
-ini_set('session.cookie_lifetime', 86400); // 24 hours in seconds
-ini_set('session.gc_maxlifetime', 86400);   // 24 hours in seconds
-session_set_cookie_params(86400); // Also set cookie params
 session_start();
 require_once __DIR__ . "/config/db.php";
 
-// Security check - only immunization doctors
+// Security check
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'doctor' || $_SESSION['doctor_role'] !== 'immunization') {
     header("Location: index.php");
     exit();
@@ -15,67 +11,116 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'doctor' || $_SES
 $doctor_id = $_SESSION['user_id'];
 $child_id = $_GET['child_id'] ?? 0;
 
-// Get child details with guardian information
-$child_query = "
-    SELECT c.*, g.id as guardian_id, g.name as guardian_name 
-    FROM children c 
-    LEFT JOIN guardians g ON c.guardian_id = g.id 
-    WHERE c.child_id = $child_id
-";
-$child = $conn->query($child_query)->fetch_assoc();
+// ============================================
+// AJAX HANDLER - MUST BE FIRST
+// ============================================
+if (isset($_GET['ajax'])) {
+    header('Content-Type: application/json');
+    
+    $doc_id = $_GET['doctor_id'] ?? 0;
+    $app_date = $_GET['appointment_date'] ?? '';
+    
+    // Define clinic hours constants
+    $clinic_open = '07:00';
+    $clinic_close = '18:00';
+    $slot_minutes = 90;
+    
+    // Generate time slots
+    $all_slots = [];
+    $start = strtotime($clinic_open);
+    $end = strtotime($clinic_close);
+    
+    while ($start < $end) {
+        $all_slots[] = date('H:i:s', $start);
+        $start = strtotime("+$slot_minutes minutes", $start);
+    }
+    
+    // Remove past times for today
+    if ($app_date == date('Y-m-d')) {
+        $current_time = date('H:i:s');
+        $all_slots = array_filter($all_slots, function($slot) use ($current_time) {
+            return $slot >= $current_time;
+        });
+        $all_slots = array_values($all_slots);
+    }
+    
+    // Get booked slots from database
+    $booked = [];
+    $booked_query = $conn->prepare("SELECT appointment_time FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status != 'Cancelled'");
+    $booked_query->bind_param("is", $doc_id, $app_date);
+    $booked_query->execute();
+    $result = $booked_query->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $booked[] = $row['appointment_time'];
+    }
+    $booked_query->close();
+    
+    // Get blocked slots
+    $blocked = [];
+    $blocked_query = $conn->prepare("SELECT block_time FROM blocked_slots WHERE doctor_id = ? AND block_date = ?");
+    $blocked_query->bind_param("is", $doc_id, $app_date);
+    $blocked_query->execute();
+    $result = $blocked_query->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $blocked[] = $row['block_time'];
+    }
+    $blocked_query->close();
+    
+    // Calculate available slots
+    $available = array_diff($all_slots, $booked, $blocked);
+    
+    // Format for display
+    $formatted = [];
+    foreach ($available as $slot) {
+        $time_obj = DateTime::createFromFormat('H:i:s', $slot);
+        $formatted[] = [
+            'value' => $slot,
+            'display' => $time_obj->format('g:i A')
+        ];
+    }
+    
+    echo json_encode(['success' => true, 'slots' => $formatted]);
+    exit();
+}
 
+// Get child details
+$child = $conn->query("SELECT * FROM children WHERE child_id = $child_id")->fetch_assoc();
 if (!$child) {
     header("Location: doctor_immunization_patients.php");
     exit();
 }
 
-// Get list of specialists for assignment
+// Get specialists
 $specialists = $conn->query("SELECT doctor_id, full_name, specialization FROM doctors WHERE doctor_role = 'specialist' AND status = 'Active' ORDER BY full_name");
+
+$show_booking = false;
+$assigned_specialist = null;
+$selected_specialist_name = '';
 
 // Handle flag submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
     $flag_type = $_POST['flag_type'];
     $reason = $_POST['reason'];
     $notes = $_POST['notes'];
-    $assigned_to = $_POST['assigned_to'] ?: null;
+    $assigned_to = $_POST['assigned_to'] ?? null;
     
-    // Start transaction
     $conn->begin_transaction();
     
     try {
-        // Insert flag
         $stmt = $conn->prepare("INSERT INTO flags (child_id, flagged_by, assigned_to, flag_type, reason, notes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'new', NOW())");
         $stmt->bind_param("iiisss", $child_id, $doctor_id, $assigned_to, $flag_type, $reason, $notes);
         
         if ($stmt->execute()) {
             $flag_id = $conn->insert_id;
             
-            // ALWAYS send notification to guardian if they exist (mandatory)
+            // Send notification to parent
             if (!empty($child['guardian_id'])) {
                 $child_name = $child['first_name'] . ' ' . $child['last_name'];
+                $title = ucfirst($flag_type) . ' Concern for ' . $child_name;
+                $message = "During an immunization checkup, our doctor has identified that $child_name needs to be reviewed by a specialist.\n\nReason: $reason";
                 
-                // Create title based on flag type
-                $type_labels = [
-                    'growth' => 'Growth Concern',
-                    'milestone' => 'Developmental Milestone Review',
-                    'vaccine' => 'Vaccine-Related Concern',
-                    'multiple' => 'Multiple Concerns',
-                    'other' => 'Specialist Review'
-                ];
-                $title = $type_labels[$flag_type] . ' for ' . $child_name;
-                
-                // Create message
-                $message = "During an immunization checkup, our doctor has identified that " . $child_name . " needs to be reviewed by a specialist.\n\n";
-                $message .= "Reason: " . $reason . "\n";
-                if (!empty($notes)) {
-                    $message .= "Additional Notes: " . $notes . "\n\n";
-                }
-                $message .= "A specialist will review your child's case";
-                
-                // Insert notification
                 $notif_stmt = $conn->prepare("
-                    INSERT INTO notifications 
-                    (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at) 
+                    INSERT INTO notifications (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at) 
                     VALUES (?, ?, 'flag', ?, ?, ?, 0, NOW())
                 ");
                 $notif_stmt->bind_param("iissi", $child['guardian_id'], $child_id, $title, $message, $flag_id);
@@ -83,22 +128,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
             }
             
             $conn->commit();
-            $message = "Child flagged successfully for specialist review.";
-            if (!empty($child['guardian_id'])) {
-                $message .= " Parent has been notified.";
-            } else {
-                $message .= " Note: No parent/guardian is linked to this child.";
-            }
-            $msg_type = "success";
+            $show_booking = true;
+            $assigned_specialist = $assigned_to;
+            
+            // Get specialist name
+            $spec_query = $conn->query("SELECT full_name FROM doctors WHERE doctor_id = $assigned_to");
+            $selected_specialist_name = $spec_query->fetch_assoc()['full_name'] ?? 'Specialist';
+            
         } else {
-            throw new Exception("Error creating flag");
+            throw new Exception("Error");
         }
     } catch (Exception $e) {
         $conn->rollback();
-        $message = "Error flagging child.";
-        $msg_type = "error";
+        $flag_error = "Error flagging child.";
     }
-    $stmt->close();
+}
+
+// Handle booking submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) {
+    $specialist_id = $_POST['specialist_id'];
+    $appointment_date = $_POST['appointment_date'];
+    $appointment_time = $_POST['appointment_time'];
+    $flag_id = $_POST['flag_id'];
+    
+    $check = $conn->prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'Cancelled'");
+    $check->bind_param("iss", $specialist_id, $appointment_date, $appointment_time);
+    $check->execute();
+    
+    if ($check->get_result()->num_rows > 0) {
+        $booking_error = "Time slot already booked. Please choose another.";
+    } else {
+        $insert = $conn->prepare("INSERT INTO appointments (child_id, doctor_id, appointment_date, appointment_time, status, notes) VALUES (?, ?, ?, ?, 'Pending', ?)");
+        $notes = "Referral from immunization doctor. Flag ID: $flag_id";
+        $insert->bind_param("iisss", $child_id, $specialist_id, $appointment_date, $appointment_time, $notes);
+        
+        if ($insert->execute()) {
+            $booking_success = "Appointment booked successfully! Parent has been notified.";
+            $show_booking = false;
+        } else {
+            $booking_error = "Error booking appointment.";
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -107,16 +177,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
     <meta charset="UTF-8">
     <title>Flag Child for Review</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { background:#f0f4fc; font-family:Arial; }
-        .wrapper { display:flex; }
+        .wrapper { display:flex; min-height:100vh; }
         .main { margin-left:260px; padding:30px; flex:1; }
+        
+        /* Sidebar Styles */
+        .sidebar { width:260px; background:#0b1a33; color:white; position:fixed; height:100vh; overflow-y:auto; }
+        .sidebar-header { padding:30px 20px; border-bottom:1px solid #1e3a5f; }
+        .sidebar-header h2 { font-size:24px; margin-bottom:5px; color:white; }
+        .sidebar-header p { font-size:13px; color:#a3c6ff; }
+        .sidebar .nav ul { list-style:none; padding:20px 0; }
+        .sidebar .nav ul li a { display:block; padding:14px 20px; color:#b8d1ff; text-decoration:none; border-left:4px solid transparent; }
+        .sidebar .nav ul li a:hover { background:#1e3a5f; border-left-color:#ffd966; color:white; }
+        .sidebar .nav ul li a::before { content:'●'; margin-right:12px; font-size:8px; color:#ffd966; }
+        
+        /* Main Content Styles */
+        .back-link { display:inline-block; margin-bottom:20px; color:#0b1a33; text-decoration:none; }
+        .back-link:hover { text-decoration:underline; }
         
         .child-header { background:white; padding:25px; margin-bottom:25px; border-left:4px solid #0b1a33; }
         .child-name { font-size:24px; font-weight:700; color:#0b1a33; }
+        .parent-badge { background:#e6f0ff; padding:5px 10px; border-radius:4px; font-size:13px; color:#0b1a33; margin-top:10px; display:inline-block; }
         
-        .card { background:white; padding:25px; border-left:4px solid #0b1a33; }
+        .alert { padding:15px; margin-bottom:20px; border-radius:6px; }
+        .alert.success { background:#d4edda; color:#155724; border-left:4px solid #28a745; }
+        .alert.error { background:#f8d7da; color:#721c24; border-left:4px solid #dc3545; }
+        
+        .booking-options { background:#f0fdf4; padding:25px; margin-bottom:20px; border-left:4px solid #10b981; border-radius:4px; }
+        .booking-options h3 { color:#0b1a33; margin-bottom:15px; }
+        
+        .info-box { background:#e6f0ff; padding:15px; border-left:4px solid #0b1a33; margin-bottom:20px; }
+        
+        .card { background:white; padding:25px; border-left:4px solid #0b1a33; margin-bottom:20px; }
         .card-header { margin-bottom:20px; }
         .card-header h2 { color:#0b1a33; font-size:20px; }
         
@@ -126,35 +221,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
         select.form-control { background:white; }
         textarea.form-control { min-height:100px; }
         
-        .btn { background:#0b1a33; color:white; padding:12px 25px; border:none; border-radius:6px; cursor:pointer; }
+        .btn { background:#0b1a33; color:white; padding:12px 25px; border:none; border-radius:6px; cursor:pointer; font-weight:600; }
         .btn-secondary { background:#6c757d; margin-left:10px; }
+        .btn-success { background:#10b981; }
+        .btn-success:hover { background:#059669; }
         
-        .alert { padding:15px; margin-bottom:20px; border-radius:6px; }
-        .alert.success { background:#d4edda; color:#155724; border-left:4px solid #28a745; }
-        .alert.error { background:#f8d7da; color:#721c24; border-left:4px solid #dc3545; }
-        
-        .back-link { display:inline-block; margin-bottom:20px; color:#0b1a33; text-decoration:none; }
-        
-        .info-box { background:#e6f0ff; padding:15px; border-left:4px solid #0b1a33; margin-bottom:20px; }
-        
-        .parent-badge {
-            background: #e6f0ff;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 13px;
-            color: #0b1a33;
-            margin-top: 10px;
-        }
-        
-        .notification-badge {
-            background: #d4edda;
-            color: #155724;
-            padding: 10px 15px;
-            border-radius: 4px;
-            font-size: 13px;
-            margin-top: 15px;
-            border-left: 3px solid #28a745;
-        }
+        /* Time Slots Grid */
+        .slots-container { margin-top:10px; }
+        .slots-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:10px; }
+        .slot-btn { background:#e6f0ff; border:1px solid #b8d1ff; padding:10px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; color:#0b1a33; text-align:center; transition:all 0.2s; }
+        .slot-btn:hover { background:#0b1a33; color:white; border-color:#0b1a33; }
+        .slot-btn.selected { background:#ffd966; color:#0b1a33; border-color:#ffd966; }
+        .loading-slots { padding:15px; text-align:center; background:#f8fafd; border-radius:6px; color:#5a6f8c; }
+        .no-slots { padding:15px; text-align:center; background:#fff3cd; border-radius:6px; color:#856404; }
+        .error-slots { padding:15px; text-align:center; background:#fee2e2; border-radius:6px; color:#dc2626; }
+        .slot-hint { font-size:12px; color:#5a6f8c; margin-top:5px; }
     </style>
 </head>
 <body>
@@ -176,28 +257,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
         </div>
     </div>
     
-    <!-- Main Content -->
     <div class="main">
         <a href="doctor_immunization_patients.php" class="back-link">← Back to Patients</a>
         
+        <!-- Child Header -->
         <div class="child-header">
             <div class="child-name"><?= htmlspecialchars($child['first_name'] . ' ' . $child['last_name']) ?></div>
             <?php if (!empty($child['guardian_name'])): ?>
             <div class="parent-badge">Parent: <?= htmlspecialchars($child['guardian_name']) ?></div>
-            <?php else: ?>
-            <div class="parent-badge" style="background:#fff3cd; color:#856404;">No parent/guardian linked</div>
             <?php endif; ?>
         </div>
         
-        <?php if (isset($message)): ?>
-        <div class="alert <?= $msg_type ?>"><?= $message ?></div>
+        <!-- Flag Success Message -->
+        <?php if (isset($flag_error)): ?>
+        <div class="alert error"><?= $flag_error ?></div>
         <?php endif; ?>
         
+        <!-- BOOKING FORM (shown after successful flag) -->
+        <?php if ($show_booking && $assigned_specialist): ?>
+        <div class="booking-options">
+            <h3>Book Specialist Appointment</h3>
+            <form method="POST" id="bookingForm">
+                <input type="hidden" name="specialist_id" id="specialist_id" value="<?= $assigned_specialist ?>">
+                <input type="hidden" name="flag_id" value="<?= $flag_id ?? '' ?>">
+                
+                <div class="form-group">
+                    <label>Specialist</label>
+                    <input type="text" class="form-control" value="Dr. <?= htmlspecialchars($selected_specialist_name) ?>" readonly disabled style="background:#f8fafd;">
+                </div>
+                
+                <div class="form-group">
+                    <label>Appointment Date</label>
+                    <input type="date" name="appointment_date" id="appointment_date" class="form-control" min="<?= date('Y-m-d') ?>" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Available Time Slots</label>
+                    <div id="slots_container" class="slots-container">
+                        <div class="loading-slots">Select a date to see available slots</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Selected Time</label>
+                    <input type="time" name="appointment_time" id="appointment_time" class="form-control" readonly style="background:#f8fafd;" required>
+                    <div class="slot-hint">Click on an available slot above to select</div>
+                </div>
+                
+                <div style="display:flex; gap:10px; margin-top:20px;">
+                    <button type="submit" name="book_appointment" class="btn btn-success">Confirm Booking</button>
+                    <a href="doctor_immunization_patients.php" class="btn btn-secondary">Done</a>
+                </div>
+            </form>
+        </div>
+        <?php elseif ($show_booking && !$assigned_specialist): ?>
+        <div class="alert error">No specialist was assigned. Please flag again with a specialist selected.</div>
+        <?php endif; ?>
+        
+        <!-- Booking result messages -->
+        <?php if (isset($booking_success)): ?>
+        <div class="alert success"><?= $booking_success ?></div>
+        <?php endif; ?>
+        
+        <?php if (isset($booking_error)): ?>
+        <div class="alert error"><?= $booking_error ?></div>
+        <?php endif; ?>
+        
+        <!-- FLAG FORM (only if not already flagged) -->
+        <?php if (!$show_booking && !isset($booking_success)): ?>
         <div class="info-box">
             <strong>Flag for Specialist Review</strong>
             <p style="margin-top:5px;">Use this to refer a child to a specialist when you notice growth concerns, developmental delays, or any other issues that need expert review.</p>
         </div>
-        
         
         <div class="card">
             <div class="card-header">
@@ -227,9 +358,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
                 </div>
                 
                 <div class="form-group">
-                    <label>Assign to Specialist (optional)</label>
-                    <select name="assigned_to" class="form-control">
-                        <option value="">-- select specialist --</option>
+                    <label>Assign to Specialist *</label>
+                    <select name="assigned_to" class="form-control" required>
+                        <option value="">-- Select Specialist --</option>
                         <?php while ($spec = $specialists->fetch_assoc()): ?>
                         <option value="<?= $spec['doctor_id'] ?>">
                             Dr. <?= htmlspecialchars($spec['full_name']) ?> (<?= htmlspecialchars($spec['specialization'] ?: 'Specialist') ?>)
@@ -242,7 +373,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
                 <a href="doctor_immunization_patients.php" class="btn btn-secondary">Cancel</a>
             </form>
         </div>
+        <?php endif; ?>
+        
     </div>
 </div>
+
+<script>
+$(document).ready(function() {
+    $('#appointment_date').on('change', function() {
+        var doctorId = $('#specialist_id').val();
+        var appointmentDate = $(this).val();
+        var container = $('#slots_container');
+        
+        if (doctorId && appointmentDate) {
+            container.html('<div class="loading-slots">Loading available time slots...</div>');
+            
+            $.ajax({
+                url: window.location.pathname + '?ajax=1',
+                type: 'GET',
+                data: {
+                    doctor_id: doctorId,
+                    appointment_date: appointmentDate
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.success && response.slots.length > 0) {
+                        var html = '<div class="slots-grid">';
+                        for (var i = 0; i < response.slots.length; i++) {
+                            html += '<div class="slot-btn" data-time="' + response.slots[i].value + '" onclick="selectSlot(this)">' + response.slots[i].display + '</div>';
+                        }
+                        html += '</div>';
+                        container.html(html);
+                    } else if (response.success && response.slots.length === 0) {
+                        container.html('<div class="no-slots">No available slots for this date. Please choose another date.</div>');
+                    } else {
+                        container.html('<div class="error-slots">Error loading slots. Please try again.</div>');
+                    }
+                },
+                error: function() {
+                    container.html('<div class="error-slots">Could not load available slots. Please check your connection.</div>');
+                }
+            });
+        } else {
+            container.html('<div class="loading-slots">Select a date to see available slots</div>');
+        }
+    });
+});
+
+function selectSlot(element) {
+    var timeValue = $(element).data('time');
+    var formattedTime = timeValue.substring(0, 5);
+    $('#appointment_time').val(formattedTime);
+    
+    $('.slot-btn').removeClass('selected');
+    $(element).addClass('selected');
+    $('#appointment_time').css('background', '#e6f0ff');
+}
+</script>
+
 </body>
 </html>
