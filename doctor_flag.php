@@ -20,12 +20,10 @@ if (isset($_GET['ajax'])) {
     $doc_id = $_GET['doctor_id'] ?? 0;
     $app_date = $_GET['appointment_date'] ?? '';
     
-    // Define clinic hours constants
     $clinic_open = '07:00';
     $clinic_close = '18:00';
     $slot_minutes = 90;
     
-    // Generate time slots
     $all_slots = [];
     $start = strtotime($clinic_open);
     $end = strtotime($clinic_close);
@@ -35,7 +33,6 @@ if (isset($_GET['ajax'])) {
         $start = strtotime("+$slot_minutes minutes", $start);
     }
     
-    // Remove past times for today
     if ($app_date == date('Y-m-d')) {
         $current_time = date('H:i:s');
         $all_slots = array_filter($all_slots, function($slot) use ($current_time) {
@@ -44,7 +41,6 @@ if (isset($_GET['ajax'])) {
         $all_slots = array_values($all_slots);
     }
     
-    // Get booked slots from database
     $booked = [];
     $booked_query = $conn->prepare("SELECT appointment_time FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status != 'Cancelled'");
     $booked_query->bind_param("is", $doc_id, $app_date);
@@ -55,7 +51,6 @@ if (isset($_GET['ajax'])) {
     }
     $booked_query->close();
     
-    // Get blocked slots
     $blocked = [];
     $blocked_query = $conn->prepare("SELECT block_time FROM blocked_slots WHERE doctor_id = ? AND block_date = ?");
     $blocked_query->bind_param("is", $doc_id, $app_date);
@@ -66,10 +61,8 @@ if (isset($_GET['ajax'])) {
     }
     $blocked_query->close();
     
-    // Calculate available slots
     $available = array_diff($all_slots, $booked, $blocked);
     
-    // Format for display
     $formatted = [];
     foreach ($available as $slot) {
         $time_obj = DateTime::createFromFormat('H:i:s', $slot);
@@ -113,7 +106,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
         if ($stmt->execute()) {
             $flag_id = $conn->insert_id;
             
-            // Send notification to parent
             if (!empty($child['guardian_id'])) {
                 $child_name = $child['first_name'] . ' ' . $child['last_name'];
                 $title = ucfirst($flag_type) . ' Concern for ' . $child_name;
@@ -131,7 +123,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
             $show_booking = true;
             $assigned_specialist = $assigned_to;
             
-            // Get specialist name
             $spec_query = $conn->query("SELECT full_name FROM doctors WHERE doctor_id = $assigned_to");
             $selected_specialist_name = $spec_query->fetch_assoc()['full_name'] ?? 'Specialist';
             
@@ -184,7 +175,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         .wrapper { display:flex; min-height:100vh; }
         .main { margin-left:260px; padding:30px; flex:1; }
         
-        /* Sidebar Styles */
         .sidebar { width:260px; background:#0b1a33; color:white; position:fixed; height:100vh; overflow-y:auto; }
         .sidebar-header { padding:30px 20px; border-bottom:1px solid #1e3a5f; }
         .sidebar-header h2 { font-size:24px; margin-bottom:5px; color:white; }
@@ -194,7 +184,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         .sidebar .nav ul li a:hover { background:#1e3a5f; border-left-color:#ffd966; color:white; }
         .sidebar .nav ul li a::before { content:'●'; margin-right:12px; font-size:8px; color:#ffd966; }
         
-        /* Main Content Styles */
         .back-link { display:inline-block; margin-bottom:20px; color:#0b1a33; text-decoration:none; }
         .back-link:hover { text-decoration:underline; }
         
@@ -205,6 +194,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         .alert { padding:15px; margin-bottom:20px; border-radius:6px; }
         .alert.success { background:#d4edda; color:#155724; border-left:4px solid #28a745; }
         .alert.error { background:#f8d7da; color:#721c24; border-left:4px solid #dc3545; }
+        
+        /* Success Message Box */
+        .success-box { 
+            background:#d4edda; 
+            padding:20px; 
+            margin-bottom:20px; 
+            border-radius:6px; 
+            border-left:4px solid #28a745;
+            text-align:center;
+        }
+        .success-box h3 { color:#155724; margin-bottom:10px; }
+        .success-box p { color:#155724; margin-bottom:15px; }
+        
+        /* Two Option Buttons */
+        .option-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .option-btn {
+            padding: 12px 25px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .option-btn.book {
+            background: #0b1a33;
+            color: white;
+        }
+        .option-btn.book:hover {
+            background: #1e3a5f;
+            transform: scale(1.02);
+        }
+        .option-btn.later {
+            background: #6c757d;
+            color: white;
+        }
+        .option-btn.later:hover {
+            background: #5a6268;
+            transform: scale(1.02);
+        }
         
         .booking-options { background:#f0fdf4; padding:25px; margin-bottom:20px; border-left:4px solid #10b981; border-radius:4px; }
         .booking-options h3 { color:#0b1a33; margin-bottom:15px; }
@@ -226,7 +260,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         .btn-success { background:#10b981; }
         .btn-success:hover { background:#059669; }
         
-        /* Time Slots Grid */
         .slots-container { margin-top:10px; }
         .slots-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:10px; }
         .slot-btn { background:#e6f0ff; border:1px solid #b8d1ff; padding:10px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; color:#0b1a33; text-align:center; transition:all 0.2s; }
@@ -236,6 +269,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         .no-slots { padding:15px; text-align:center; background:#fff3cd; border-radius:6px; color:#856404; }
         .error-slots { padding:15px; text-align:center; background:#fee2e2; border-radius:6px; color:#dc2626; }
         .slot-hint { font-size:12px; color:#5a6f8c; margin-top:5px; }
+        
+        .back-link-choices { display:inline-block; margin-top:15px; color:#0b1a33; text-decoration:none; }
     </style>
 </head>
 <body>
@@ -268,51 +303,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
             <?php endif; ?>
         </div>
         
-        <!-- Flag Success Message -->
         <?php if (isset($flag_error)): ?>
         <div class="alert error"><?= $flag_error ?></div>
         <?php endif; ?>
         
-        <!-- BOOKING FORM (shown after successful flag) -->
-        <?php if ($show_booking && $assigned_specialist): ?>
-        <div class="booking-options">
-            <h3>Book Specialist Appointment</h3>
-            <form method="POST" id="bookingForm">
-                <input type="hidden" name="specialist_id" id="specialist_id" value="<?= $assigned_specialist ?>">
-                <input type="hidden" name="flag_id" value="<?= $flag_id ?? '' ?>">
-                
-                <div class="form-group">
-                    <label>Specialist</label>
-                    <input type="text" class="form-control" value="Dr. <?= htmlspecialchars($selected_specialist_name) ?>" readonly disabled style="background:#f8fafd;">
-                </div>
-                
-                <div class="form-group">
-                    <label>Appointment Date</label>
-                    <input type="date" name="appointment_date" id="appointment_date" class="form-control" min="<?= date('Y-m-d') ?>" required>
-                </div>
-                
-                <div class="form-group">
-                    <label>Available Time Slots</label>
-                    <div id="slots_container" class="slots-container">
-                        <div class="loading-slots">Select a date to see available slots</div>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Selected Time</label>
-                    <input type="time" name="appointment_time" id="appointment_time" class="form-control" readonly style="background:#f8fafd;" required>
-                    <div class="slot-hint">Click on an available slot above to select</div>
-                </div>
-                
-                <div style="display:flex; gap:10px; margin-top:20px;">
-                    <button type="submit" name="book_appointment" class="btn btn-success">Confirm Booking</button>
-                    <a href="doctor_immunization_patients.php" class="btn btn-secondary">Done</a>
-                </div>
-            </form>
+        <!-- SUCCESS MESSAGE WITH CHOICES (shown after successful flag) -->
+        <?php if ($show_booking && $assigned_specialist && !isset($_POST['book_appointment'])): ?>
+        <div class="success-box">
+            <h3>✓ Flag Submitted Successfully</h3>
+            <p>Parent has been notified that a specialist review is needed.</p>
+            <p><strong>What would you like to do next?</strong></p>
+            
+            <div class="option-buttons">
+                <button onclick="showBookingForm()" class="option-btn book">Book Appointment for Parent</button>
+                <a href="doctor_immunization_patients.php" class="option-btn later">Done - Parent Will Book Later</a>
+            </div>
         </div>
-        <?php elseif ($show_booking && !$assigned_specialist): ?>
-        <div class="alert error">No specialist was assigned. Please flag again with a specialist selected.</div>
         <?php endif; ?>
+        
+        <!-- BOOKING FORM (shown when doctor clicks "Book Appointment for Parent") -->
+        <div id="bookingFormContainer" style="display:none;">
+            <div class="booking-options">
+                <h3>Book Specialist Appointment</h3>
+                <form method="POST" id="bookingForm">
+                    <input type="hidden" name="specialist_id" id="specialist_id" value="<?= $assigned_specialist ?>">
+                    <input type="hidden" name="flag_id" value="<?= $flag_id ?? '' ?>">
+                    
+                    <div class="form-group">
+                        <label>Specialist</label>
+                        <input type="text" class="form-control" value="Dr. <?= htmlspecialchars($selected_specialist_name) ?>" readonly disabled style="background:#f8fafd;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Appointment Date</label>
+                        <input type="date" name="appointment_date" id="appointment_date" class="form-control" min="<?= date('Y-m-d') ?>" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Available Time Slots</label>
+                        <div id="slots_container" class="slots-container">
+                            <div class="loading-slots">Select a date to see available slots</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Selected Time</label>
+                        <input type="time" name="appointment_time" id="appointment_time" class="form-control" readonly style="background:#f8fafd;" required>
+                        <div class="slot-hint">Click on an available slot above to select</div>
+                    </div>
+                    
+                    <div style="display:flex; gap:10px; margin-top:20px;">
+                        <button type="submit" name="book_appointment" class="btn btn-success">Confirm Booking</button>
+                        <button type="button" onclick="hideBookingForm()" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
         
         <!-- Booking result messages -->
         <?php if (isset($booking_success)): ?>
@@ -379,6 +425,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
 </div>
 
 <script>
+function showBookingForm() {
+    document.getElementById('bookingFormContainer').style.display = 'block';
+    // Scroll to the booking form
+    document.getElementById('bookingFormContainer').scrollIntoView({ behavior: 'smooth' });
+}
+
+function hideBookingForm() {
+    document.getElementById('bookingFormContainer').style.display = 'none';
+}
+
 $(document).ready(function() {
     $('#appointment_date').on('change', function() {
         var doctorId = $('#specialist_id').val();

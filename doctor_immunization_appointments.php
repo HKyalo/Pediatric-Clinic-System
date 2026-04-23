@@ -15,43 +15,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'doctor' || $_SES
 $doctor_id = $_SESSION['user_id'];
 $doctor_name = $_SESSION['name'];
 
-// Handle marking appointment as complete
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
-    $appointment_id = intval($_POST['appointment_id']);
-    $child_id = intval($_POST['child_id']);
-    $visit_date = $_POST['visit_date'];
-    
-    // Check if vitals were recorded today
-    $vitals_check = $conn->query("
-        SELECT * FROM growth_records 
-        WHERE child_id = $child_id 
-        AND record_date = '$visit_date'
-    ");
-    
-    // Check if vaccines were given today
-    $vaccines_check = $conn->query("
-        SELECT * FROM vaccination_records 
-        WHERE child_id = $child_id 
-        AND date_administered = '$visit_date'
-    ");
-    
-    // Check if milestones were updated (optional - can be skipped)
-    // For now, only require vitals or vaccines
-    
-    if ($vitals_check->num_rows == 0 && $vaccines_check->num_rows == 0) {
-        $error = "Cannot mark complete. No vitals recorded and no vaccines given for this visit.";
-    } else {
-        $update = $conn->prepare("UPDATE appointments SET status = 'Completed' WHERE appointment_id = ? AND doctor_id = ?");
-        $update->bind_param("ii", $appointment_id, $doctor_id);
-        
-        if ($update->execute()) {
-            $message = "Appointment marked as completed!";
-            $msg_type = "success";
-        }
-        $update->close();
-    }
-}
-
 // Get filter from URL (today, upcoming, past)
 $filter = $_GET['filter'] ?? 'upcoming';
 $today = date('Y-m-d');
@@ -97,20 +60,12 @@ $appointments = $conn->query("
         
         .card { background:white; padding:25px; border-left:4px solid #0b1a33; }
         
-        .alert { padding:15px; margin-bottom:20px; border-radius:6px; }
-        .alert.success { background:#d4edda; color:#155724; border-left:4px solid #28a745; }
-        .alert.error { background:#f8d7da; color:#721c24; border-left:4px solid #dc3545; }
-        
         table { width:100%; border-collapse:collapse; }
         th { background:#0b1a33; color:white; padding:12px; text-align:left; }
         td { padding:12px; border-bottom:1px solid #e2e8f0; }
         tr:hover td { background:#f8fafd; }
         
         .btn-sm { background:#0b1a33; color:white; padding:5px 12px; text-decoration:none; border-radius:4px; font-size:13px; display:inline-block; margin:2px; }
-        .btn-success { background:#10b981; }
-        .btn-success:hover { background:#059669; }
-        .btn-disabled { background:#9ca3af; cursor:not-allowed; opacity:0.6; pointer-events:none; }
-        
         .status { padding:4px 8px; border-radius:4px; font-size:12px; }
         .status-pending { background:#fff3cd; color:#856404; }
         .status-confirmed { background:#d4edda; color:#155724; }
@@ -124,9 +79,6 @@ $appointments = $conn->query("
         .indicator-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
         .dot-green { background:#10b981; }
         .dot-red { background:#ef4444; }
-        .dot-yellow { background:#f59e0b; }
-        
-        form { display:inline; }
     </style>
 </head>
 <body>
@@ -153,14 +105,6 @@ $appointments = $conn->query("
         <h1>My Appointments</h1>
         <p class="subtitle">Dr. <?= htmlspecialchars($doctor_name) ?></p>
         
-        <?php if (isset($message)): ?>
-        <div class="alert success"><?= $message ?></div>
-        <?php endif; ?>
-        
-        <?php if (isset($error)): ?>
-        <div class="alert error"><?= $error ?></div>
-        <?php endif; ?>
-        
         <!-- Filter Tabs -->
         <div class="filter-tabs">
             <a href="?filter=upcoming" class="filter-tab <?= $filter === 'upcoming' ? 'active' : '' ?>">Upcoming</a>
@@ -185,40 +129,23 @@ $appointments = $conn->query("
                 </thead>
                 <tbody>
                     <?php while ($apt = $appointments->fetch_assoc()): 
-                        $can_complete = ($apt['status'] != 'Completed' && $apt['status'] != 'Cancelled' && strtotime($apt['appointment_date']) <= strtotime($today));
                         $has_vitals = $apt['vitals_recorded'] > 0;
                         $has_vaccines = $apt['vaccines_given'] > 0;
-                        $can_mark_complete = $can_complete && ($has_vitals || $has_vaccines);
                     ?>
                     <tr>
                         <td><?= date('M d, Y', strtotime($apt['appointment_date'])) ?></td>
                         <td><?= date('g:i A', strtotime($apt['appointment_time'])) ?></td>
                         <td><?= htmlspecialchars($apt['first_name'] . ' ' . $apt['last_name']) ?></td>
-                        <td><?= $apt['age_months'] ?> months</td>
-                        <td><span class="status status-<?= strtolower($apt['status']) ?>"><?= $apt['status'] ?></span></td>
-                        <td>
-                            <div class="visit-indicator">
-                                <span><span class="indicator-dot <?= $has_vitals ? 'dot-green' : 'dot-red' ?>"></span> Vitals</span>
-                                <span><span class="indicator-dot <?= $has_vaccines ? 'dot-green' : 'dot-red' ?>"></span> Vaccines</span>
-                            </div>
-                        </td>
+                        <td><?= $apt['age_months'] ?> months</td
+                        <td><span class="status status-<?= strtolower($apt['status']) ?>"><?= $apt['status'] ?></span></td
+                        <td class="visit-indicator">
+                            <span><span class="indicator-dot <?= $has_vitals ? 'dot-green' : 'dot-red' ?>"></span> Vitals</span>
+                            <span><span class="indicator-dot <?= $has_vaccines ? 'dot-green' : 'dot-red' ?>"></span> Vaccines</span>
+                        </td
                         <td class="action-group">
-                            <!-- Single View EHR button for all actions -->
-                            <a href="doctor_child_ehr.php?child_id=<?= $apt['child_id'] ?>" class="btn-sm">📋 View EHR</a>
-                            
-                            <!-- Mark as Complete button (only if vitals or vaccines recorded) -->
-                            <?php if ($can_mark_complete): ?>
-                            <form method="POST">
-                                <input type="hidden" name="appointment_id" value="<?= $apt['appointment_id'] ?>">
-                                <input type="hidden" name="child_id" value="<?= $apt['child_id'] ?>">
-                                <input type="hidden" name="visit_date" value="<?= $apt['appointment_date'] ?>">
-                                <button type="submit" name="mark_complete" class="btn-sm btn-success" onclick="return confirm('Mark this appointment as completed?')">✓ Mark Complete</button>
-                            </form>
-                            <?php elseif ($can_complete): ?>
-                            <span class="btn-sm btn-disabled" title="Record vitals or vaccines first">✓ Complete</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
+                            <a href="doctor_child_ehr.php?child_id=<?= $apt['child_id'] ?>" class="btn-sm">View EHR</a>
+                        </td
+                    </tr
                     <?php endwhile; ?>
                 </tbody>
             </table>
