@@ -350,6 +350,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lab_results'])) 
     $message = "Lab results saved successfully!";
     $msg_type = "success";
     $has_labs_today = true;
+    $active_tab = 'labs';
 }
 
 // Get latest assessment
@@ -416,10 +417,24 @@ foreach ($milestone_data as $num => $data) {
         .alert.error { background:#f8d7da; color:#721c24; border-left:4px solid #dc3545; }
         .alert.info { background:#d1ecf1; color:#0c5460; border-left:4px solid #17a2b8; }
         
-        table { width:100%; border-collapse:collapse; font-size:14px; }
-        th { background:#0b1a33; color:white; padding:10px; text-align:left; }
-        td { padding:10px; border-bottom:1px solid #e2e8f0; }
-        tr:hover td { background:#f8fafd; }
+        table { 
+            width:100%; 
+            border-collapse:collapse; 
+            font-size:14px;
+            margin-bottom:20px;
+        }
+        th, td { 
+            border: 1px solid #ddd;
+            padding:10px; 
+            text-align:left; 
+        }
+        th { 
+            background:#0b1a33; 
+            color:white; 
+        }
+        tr:hover td { 
+            background:#f8fafd; 
+        }
         
         .back-link { display:inline-block; margin-bottom:20px; color:#0b1a33; text-decoration:none; }
         
@@ -546,18 +561,38 @@ foreach ($milestone_data as $num => $data) {
                 <h2>Growth Chart</h2>
                 <div style="height:300px;"><canvas id="growthChart"></canvas></div>
             </div>
+            
             <div class="section">
-                <h2>Growth History</h2>
+                <div class="section-header">
+                    <h2>Growth History</h2>
+                </div>
                 <?php if ($growth_history->num_rows > 0): ?>
-                </table>
-                    <thead><tr><th>Date</th><th>Weight (kg)</th><th>Height (cm)</th><th>Head (cm)</th></tr></thead>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Weight (kg)</th>
+                            <th>Height (cm)</th>
+                            <th>Head (cm)</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        <?php while ($g = $growth_history->fetch_assoc()): ?>
-                        <tr><td><?= date('M d, Y', strtotime($g['record_date'])) ?></td><td><?= $g['weight_kg'] ?></td><td><?= $g['height_cm'] ?></td><td><?= $g['head_circumference'] ?? '-' ?></td></tr>
+                        <?php 
+                        $growth_history->data_seek(0);
+                        while ($g = $growth_history->fetch_assoc()): 
+                        ?>
+                        <tr>
+                            <tr><?= date('M d, Y', strtotime($g['record_date'])) ?></td>
+                            <td><?= $g['weight_kg'] ?></td>
+                            <td><?= $g['height_cm'] ?></td>
+                            <td><?= $g['head_circumference'] ?? '-' ?></td>
+                        </tr>
                         <?php endwhile; ?>
                     </tbody>
                 </table>
-                <?php else: ?><p>No growth records yet.</p><?php endif; ?>
+                <?php else: ?>
+                    <p>No growth records yet.</p>
+                <?php endif; ?>
             </div>
         </div>
         
@@ -566,22 +601,45 @@ foreach ($milestone_data as $num => $data) {
             <div class="section">
                 <h2>Vaccine History</h2>
                 <?php if ($completed_vaccines->num_rows > 0): ?>
-                <table style="width:100%; margin-bottom:30px;">
-                    <thead><tr><th>Date</th><th>Vaccine</th><th>Dose</th></tr></thead>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vaccine</th>
+                            <th>Dose</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php while ($rec = $completed_vaccines->fetch_assoc()): ?>
-                        <tr><td><?= date('M d, Y', strtotime($rec['date_administered'])) ?></td><td><?= htmlspecialchars($rec['vaccine_name']) ?></td><td>Dose <?= $rec['dose_number'] ?></td></tr>
+                        <tr>
+                            <td><?= date('M d, Y', strtotime($rec['date_administered'])) ?></td>
+                            <td><?= htmlspecialchars($rec['vaccine_name']) ?></td>
+                            <td>Dose <?= $rec['dose_number'] ?></td>
+                        </tr>
                         <?php endwhile; ?>
                     </tbody>
                 </table>
-                <?php else: ?><p>No vaccine records yet.</p><?php endif; ?>
+                <?php else: ?>
+                    <p>No vaccine records yet.</p>
+                <?php endif; ?>
+                
                 <?php if (!empty($due_vaccines)): ?>
                 <h3 style="margin:20px 0 10px;">Due Vaccines</h3>
-                <table style="width:100%;">
-                    <thead><tr><th>Vaccine</th><th>Dose</th><th>Status</th></tr></thead>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Vaccine</th>
+                            <th>Dose</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php foreach ($due_vaccines as $vax): ?>
-                        <tr><td><?= htmlspecialchars($vax['vaccine_name']) ?></td><td>Dose <?= $vax['dose_number'] ?></td><td><span class="badge <?= $vax['status'] ?>"><?= $vax['status'] ?></span></td></tr>
+                        <tr>
+                            <td><?= htmlspecialchars($vax['vaccine_name']) ?></td>
+                            <td>Dose <?= $vax['dose_number'] ?></td>
+                            <td><span class="badge <?= $vax['status'] ?>"><?= $vax['status'] ?></span></td>
+                        </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
@@ -593,8 +651,16 @@ foreach ($milestone_data as $num => $data) {
         <div id="tab-development" class="tab-content <?= $active_tab == 'development' ? 'active' : '' ?>">
             <div class="section">
                 <h2>Developmental Milestones</h2>
-                <table style="width:100%;">
-                    <thead><tr><th>Milestone</th><th>Normal Limits</th><th>Category</th><th>Status</th><th>Date Achieved</th></tr></thead>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Milestone</th>
+                            <th>Normal Limits</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Date Achieved</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php foreach ($milestone_data as $num => $data): 
                             $achieved = isset($milestone_map[$num]) && $milestone_map[$num]['achieved'] ? true : false;
@@ -605,16 +671,33 @@ foreach ($milestone_data as $num => $data) {
                             <td><?= $data['description'] ?></td>
                             <td><?= $data['expected_range'] ?></td>
                             <td><?= ucfirst($data['category']) ?></td>
-                            <td><?php if ($achieved): ?><span class="badge achieved">Achieved</span><?php elseif ($is_delayed): ?><span class="badge delayed">Delayed</span><?php else: ?><span class="badge pending">Pending</span><?php endif; ?></td>
+                            <td>
+                                <?php if ($achieved): ?>
+                                    <span class="badge achieved">Achieved</span>
+                                <?php elseif ($is_delayed): ?>
+                                    <span class="badge delayed">Delayed</span>
+                                <?php else: ?>
+                                    <span class="badge pending">Pending</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= $date_val ? date('M d, Y', strtotime($date_val)) : '-' ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
+            
             <?php if (!empty($delays)): ?>
-            <div class="delay-box"><h3 style="color:#991b1b; margin-bottom:10px;">Potential Delays Detected</h3><ul style="color:#991b1b; margin-left:20px;"><?php foreach ($delays as $d): ?><li><?= $d ?></li><?php endforeach; ?></ul></div>
+            <div class="delay-box">
+                <h3 style="color:#991b1b; margin-bottom:10px;">Potential Delays Detected</h3>
+                <ul style="color:#991b1b; margin-left:20px;">
+                    <?php foreach ($delays as $d): ?>
+                        <li><?= $d ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
             <?php endif; ?>
+            
             <div class="section">
                 <h2>Teeth Development</h2>
                 <div class="grid-4">
@@ -623,7 +706,11 @@ foreach ($milestone_data as $num => $data) {
                     while ($tooth = $teeth_defs->fetch_assoc()): 
                         $emerged = $teeth_map[$tooth['tooth_id']]['emerged_date'] ?? '';
                     ?>
-                    <div style="margin-bottom:10px;"><strong><?= $tooth['tooth_type'] ?></strong><br><?= $emerged ? date('M d, Y', strtotime($emerged)) : '<span style="color:#5a6f8c;">Not emerged</span>' ?><br><small>Expected: <?= $tooth['expected_age_min'] ?>-<?= $tooth['expected_age_max'] ?> mo</small></div>
+                    <div style="margin-bottom:10px;">
+                        <strong><?= $tooth['tooth_type'] ?></strong><br>
+                        <?= $emerged ? date('M d, Y', strtotime($emerged)) : '<span style="color:#5a6f8c;">Not emerged</span>' ?><br>
+                        <small>Expected: <?= $tooth['expected_age_min'] ?>-<?= $tooth['expected_age_max'] ?> mo</small>
+                    </div>
                     <?php endwhile; ?>
                 </div>
             </div>
@@ -635,40 +722,82 @@ foreach ($milestone_data as $num => $data) {
             <div class="section">
                 <h2>New Assessment</h2>
                 <form method="POST">
-                    <div class="form-group"><label>Diagnosis *</label><input type="text" name="diagnosis" class="form-control" required></div>
-                    <div class="form-group"><label>Clinical Notes</label><textarea name="clinical_notes" class="form-control" rows="3"></textarea></div>
-                    <div class="form-group"><label>Treatment Plan</label><textarea name="treatment_plan" class="form-control" rows="3"></textarea></div>
+                    <div class="form-group">
+                        <label>Diagnosis *</label>
+                        <input type="text" name="diagnosis" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Clinical Notes</label>
+                        <textarea name="clinical_notes" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Treatment Plan</label>
+                        <textarea name="treatment_plan" class="form-control" rows="3"></textarea>
+                    </div>
+                    
                     <div class="section-header">Lab Orders</div>
-                    <div class="form-group"><label>Tests to Order</label><textarea name="lab_orders" class="form-control" rows="3" placeholder="Complete Blood Count&#10;Iron Studies&#10;Thyroid Function Test"></textarea></div>
+                    <div class="form-group">
+                        <label>Tests to Order</label>
+                        <textarea name="lab_orders" class="form-control" rows="3" placeholder="Complete Blood Count&#10;Iron Studies&#10;Thyroid Function Test"></textarea>
+                    </div>
+                    
                     <div class="section-header">Prescriptions</div>
                     <div id="prescriptions-container">
                         <div class="prescription-row">
                             <div class="grid-2">
-                                <div class="form-group"><label>Medicine Name</label><input type="text" name="med_name[]" class="form-control"></div>
-                                <div class="form-group"><label>Dosage</label><input type="text" name="dosage[]" class="form-control"></div>
+                                <div class="form-group">
+                                    <label>Medicine Name</label>
+                                    <input type="text" name="med_name[]" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Dosage</label>
+                                    <input type="text" name="dosage[]" class="form-control">
+                                </div>
                             </div>
                             <div class="grid-2">
-                                <div class="form-group"><label>Frequency</label><input type="text" name="frequency[]" class="form-control"></div>
-                                <div class="form-group"><label>Duration</label><input type="text" name="duration[]" class="form-control"></div>
+                                <div class="form-group">
+                                    <label>Frequency</label>
+                                    <input type="text" name="frequency[]" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Duration</label>
+                                    <input type="text" name="duration[]" class="form-control">
+                                </div>
                             </div>
-                            <div class="form-group"><label>Instructions</label><textarea name="instructions[]" class="form-control" rows="2"></textarea></div>
+                            <div class="form-group">
+                                <label>Instructions</label>
+                                <textarea name="instructions[]" class="form-control" rows="2"></textarea>
+                            </div>
                         </div>
                     </div>
                     <button type="button" onclick="addPrescription()" class="btn btn-sm" style="margin-bottom:20px;">+ Add Another Medication</button>
+                    
                     <div class="section-header">Referrals</div>
-                    <div class="form-group"><label>Refer to</label><textarea name="referrals" class="form-control" rows="2"></textarea></div>
+                    <div class="form-group">
+                        <label>Refer to</label>
+                        <textarea name="referrals" class="form-control" rows="2"></textarea>
+                    </div>
+                    
                     <div class="section-header">Follow-up</div>
-                    <div class="form-group"><label>Follow-up Date</label><input type="date" name="follow_up_date" class="form-control"></div>
+                    <div class="form-group">
+                        <label>Follow-up Date</label>
+                        <input type="date" name="follow_up_date" class="form-control">
+                    </div>
+                    
                     <button type="submit" name="save_assessment" class="btn btn-success">Save Assessment</button>
                 </form>
             </div>
             <?php elseif ($has_assessment_today && !$is_completed): ?>
             <div class="section">
-                <div class="info-box" style="background:#d4edda; border-left-color:#28a745;"><p>✓ Assessment has been saved. Proceed to Labs tab.</p></div>
+                <div class="info-box" style="background:#d4edda; border-left-color:#28a745;">
+                    <p>✓ Assessment has been saved. Proceed to Labs tab.</p>
+                </div>
             </div>
             <?php else: ?>
             <div class="section">
-                <div class="info-box" style="background:#f8fafd;"><p><?php if ($is_completed): ?>This appointment has been completed. No further assessments can be added.<?php else: ?>To add a new assessment, please ensure there is a scheduled appointment.<?php endif; ?></p></div>
+                <div class="info-box" style="background:#f8fafd;">
+                    <p><?php if ($is_completed): ?>This appointment has been completed. No further assessments can be added.<?php else: ?>To add a new assessment, please ensure there is a scheduled appointment.<?php endif; ?></p>
+                </div>
             </div>
             <?php endif; ?>
             
@@ -680,17 +809,35 @@ foreach ($milestone_data as $num => $data) {
                     $review_prescriptions = $conn->query("SELECT * FROM prescriptions WHERE review_id = " . $a['review_id'] . " ORDER BY prescription_id");
                 ?>
                 <div style="border:1px solid #e2e8f0; padding:15px; margin-bottom:15px; border-radius:4px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;"><strong><?= date('M d, Y', strtotime($a['review_date'])) ?></strong><span style="color:#5a6f8c;">Dr. <?= htmlspecialchars($a['doctor_name'] ?? 'Unknown') ?></span></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <strong><?= date('M d, Y', strtotime($a['review_date'])) ?></strong>
+                        <span style="color:#5a6f8c;">Dr. <?= htmlspecialchars($a['doctor_name'] ?? 'Unknown') ?></span>
+                    </div>
                     <p><strong>Diagnosis:</strong> <?= htmlspecialchars($a['diagnosis'] ?? 'None') ?></p>
-                    <?php if ($a['diagnosis_notes']): ?><p><strong>Notes:</strong> <?= nl2br(htmlspecialchars($a['diagnosis_notes'])) ?></p><?php endif; ?>
+                    <?php if ($a['diagnosis_notes']): ?>
+                        <p><strong>Notes:</strong> <?= nl2br(htmlspecialchars($a['diagnosis_notes'])) ?></p>
+                    <?php endif; ?>
                     <?php if ($review_prescriptions->num_rows > 0): ?>
-                    <div style="margin-top:10px;"><strong>Prescriptions:</strong>
+                    <div style="margin-top:10px;">
+                        <strong>Prescriptions:</strong>
                         <?php while ($p = $review_prescriptions->fetch_assoc()): ?>
-                        <div class="med-item"><strong><?= htmlspecialchars($p['medication_name']) ?></strong><br><span style="font-size:13px;">Dosage: <?= htmlspecialchars($p['dosage']) ?><?php if ($p['frequency']): ?> • <?= htmlspecialchars($p['frequency']) ?><?php endif; ?><?php if ($p['duration']): ?> • Duration: <?= htmlspecialchars($p['duration']) ?><?php endif; ?></span><?php if ($p['instructions']): ?><div style="font-size:12px; color:#5a6f8c; margin-top:3px;"><?= htmlspecialchars($p['instructions']) ?></div><?php endif; ?></div>
+                        <div class="med-item">
+                            <strong><?= htmlspecialchars($p['medication_name']) ?></strong><br>
+                            <span style="font-size:13px;">
+                                Dosage: <?= htmlspecialchars($p['dosage']) ?>
+                                <?php if ($p['frequency']): ?> • <?= htmlspecialchars($p['frequency']) ?><?php endif; ?>
+                                <?php if ($p['duration']): ?> • Duration: <?= htmlspecialchars($p['duration']) ?><?php endif; ?>
+                            </span>
+                            <?php if ($p['instructions']): ?>
+                                <div style="font-size:12px; color:#5a6f8c; margin-top:3px;"><?= htmlspecialchars($p['instructions']) ?></div>
+                            <?php endif; ?>
+                        </div>
                         <?php endwhile; ?>
                     </div>
                     <?php endif; ?>
-                    <?php if ($a['follow_up_date']): ?><p style="margin-top:10px;"><strong>Follow-up:</strong> <?= date('M d, Y', strtotime($a['follow_up_date'])) ?></p><?php endif; ?>
+                    <?php if ($a['follow_up_date']): ?>
+                        <p style="margin-top:10px;"><strong>Follow-up:</strong> <?= date('M d, Y', strtotime($a['follow_up_date'])) ?></p>
+                    <?php endif; ?>
                 </div>
                 <?php endwhile; ?>
             </div>
@@ -706,23 +853,42 @@ foreach ($milestone_data as $num => $data) {
                     <div id="lab-results-container">
                         <div class="lab-row" id="lab-row-0">
                             <div class="grid-2">
-                                <div class="form-group"><label>Test Name</label><input type="text" name="test_name[0]" class="form-control" required></div>
-                                <div class="form-group"><label>Test Date</label><input type="date" name="test_date[0]" class="form-control" value="<?= date('Y-m-d') ?>" required></div>
+                                <div class="form-group">
+                                    <label>Test Name</label>
+                                    <input type="text" name="test_name[0]" class="form-control" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Test Date</label>
+                                    <input type="date" name="test_date[0]" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                                </div>
                             </div>
                             <div class="grid-2">
-                                <div class="form-group"><label>Result Value</label><input type="text" name="result_value[0]" class="form-control"></div>
-                                <div class="form-group"><label>Upload File</label><input type="file" name="lab_file_0" accept=".pdf,.jpg,.png"></div>
+                                <div class="form-group">
+                                    <label>Result Value</label>
+                                    <input type="text" name="result_value[0]" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Upload File</label>
+                                    <input type="file" name="lab_file_0" accept=".pdf,.jpg,.png">
+                                </div>
                             </div>
-                            <div class="form-group"><label>Summary</label><textarea name="summary[0]" class="form-control" rows="2"></textarea></div>
+                            <div class="form-group">
+                                <label>Summary</label>
+                                <textarea name="summary[0]" class="form-control" rows="2"></textarea>
+                            </div>
                         </div>
                     </div>
                     <button type="button" onclick="addLabRow()" class="btn btn-sm" style="margin-bottom:15px;">+ Add Another Test</button>
                     <button type="submit" name="save_lab_results" class="btn btn-success">Save Lab Results</button>
                 </form>
                 <?php elseif (!$is_completed && !$has_assessment_today): ?>
-                <div class="info-box" style="background:#fff3cd; border-left-color:#f59e0b;"><p>Please save the assessment first before adding lab results.</p></div>
+                <div class="info-box" style="background:#fff3cd; border-left-color:#f59e0b;">
+                    <p>Please save the assessment first before adding lab results.</p>
+                </div>
                 <?php elseif ($is_completed): ?>
-                <div class="info-box" style="background:#f8fafd;"><p>This appointment has been completed. No further lab results can be added.</p></div>
+                <div class="info-box" style="background:#f8fafd;">
+                    <p>This appointment has been completed. No further lab results can be added.</p>
+                </div>
                 <?php endif; ?>
             </div>
             
@@ -730,7 +896,14 @@ foreach ($milestone_data as $num => $data) {
                 <h2>Previous Lab Results</h2>
                 <?php if ($labs->num_rows > 0): ?>
                 <table>
-                    <thead><tr><th>Date</th><th>Test</th><th>Result</th><th>File</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Test</th>
+                            <th>Result</th>
+                            <th>File</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         <?php while ($l = $labs->fetch_assoc()): ?>
                         <tr>
@@ -742,7 +915,9 @@ foreach ($milestone_data as $num => $data) {
                         <?php endwhile; ?>
                     </tbody>
                 </table>
-                <?php else: ?><p>No lab results yet.</p><?php endif; ?>
+                <?php else: ?>
+                    <p>No lab results yet.</p>
+                <?php endif; ?>
             </div>
             
             <!-- MARK COMPLETE BUTTON -->
@@ -754,10 +929,14 @@ foreach ($milestone_data as $num => $data) {
                         Mark Complete & Finish
                     </button>
                 </form>
-                <p style="color:#5a6f8c; font-size:12px; margin-top:10px;"><?php echo (!$has_labs_today) ? 'No labs required. Click to complete appointment.' : 'Assessment and labs saved. Click to complete appointment.'; ?></p>
+                <p style="color:#5a6f8c; font-size:12px; margin-top:10px;">
+                    <?php echo (!$has_labs_today) ? 'No labs required. Click to complete appointment.' : 'Assessment and labs saved. Click to complete appointment.'; ?>
+                </p>
             </div>
             <?php elseif ($has_assessment_today && !$is_completed): ?>
-            <div class="info-box" style="background:#d4edda; border-left-color:#28a745; margin-top:20px;"><p>✓ Assessment saved. You can now mark this appointment as complete using the button above.</p></div>
+            <div class="info-box" style="background:#d4edda; border-left-color:#28a745; margin-top:20px;">
+                <p>✓ Assessment saved. You can now mark this appointment as complete using the button above.</p>
+            </div>
             <?php endif; ?>
         </div>
     </div>
@@ -772,9 +951,30 @@ function addLabRow() {
     const html = `
         <div class="lab-row" id="lab-row-${labRowCount}">
             <button type="button" onclick="this.closest('.lab-row').remove()" style="float:right; background:#dc2626; color:white; border:none; padding:2px 8px; border-radius:4px;">✕</button>
-            <div class="grid-2"><div class="form-group"><label>Test Name</label><input type="text" name="test_name[${labRowCount}]" class="form-control" required></div><div class="form-group"><label>Test Date</label><input type="date" name="test_date[${labRowCount}]" class="form-control" value="<?= date('Y-m-d') ?>" required></div></div>
-            <div class="grid-2"><div class="form-group"><label>Result Value</label><input type="text" name="result_value[${labRowCount}]" class="form-control"></div><div class="form-group"><label>Upload File</label><input type="file" name="lab_file_${labRowCount}" accept=".pdf,.jpg,.png"></div></div>
-            <div class="form-group"><label>Summary</label><textarea name="summary[${labRowCount}]" class="form-control" rows="2"></textarea></div>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Test Name</label>
+                    <input type="text" name="test_name[${labRowCount}]" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Test Date</label>
+                    <input type="date" name="test_date[${labRowCount}]" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                </div>
+            </div>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Result Value</label>
+                    <input type="text" name="result_value[${labRowCount}]" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Upload File</label>
+                    <input type="file" name="lab_file_${labRowCount}" accept=".pdf,.jpg,.png">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Summary</label>
+                <textarea name="summary[${labRowCount}]" class="form-control" rows="2"></textarea>
+            </div>
         </div>
     `;
     container.insertAdjacentHTML('beforeend', html);
@@ -786,9 +986,30 @@ function addPrescription() {
     const html = `
         <div class="prescription-row" style="margin-top:15px;">
             <button type="button" onclick="this.closest('.prescription-row').remove()" style="float:right; background:#dc2626; color:white; border:none; padding:2px 8px; border-radius:4px;">✕</button>
-            <div class="grid-2"><div class="form-group"><label>Medicine Name</label><input type="text" name="med_name[]" class="form-control"></div><div class="form-group"><label>Dosage</label><input type="text" name="dosage[]" class="form-control"></div></div>
-            <div class="grid-2"><div class="form-group"><label>Frequency</label><input type="text" name="frequency[]" class="form-control"></div><div class="form-group"><label>Duration</label><input type="text" name="duration[]" class="form-control"></div></div>
-            <div class="form-group"><label>Instructions</label><textarea name="instructions[]" class="form-control" rows="2"></textarea></div>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Medicine Name</label>
+                    <input type="text" name="med_name[]" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Dosage</label>
+                    <input type="text" name="dosage[]" class="form-control">
+                </div>
+            </div>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Frequency</label>
+                    <input type="text" name="frequency[]" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Duration</label>
+                    <input type="text" name="duration[]" class="form-control">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Instructions</label>
+                <textarea name="instructions[]" class="form-control" rows="2"></textarea>
+            </div>
         </div>
     `;
     container.insertAdjacentHTML('beforeend', html);
