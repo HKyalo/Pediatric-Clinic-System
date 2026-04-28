@@ -65,8 +65,8 @@ $appointments = $conn->query("
         td { padding:12px; border-bottom:1px solid #e2e8f0; }
         tr:hover td { background:#f8fafd; }
         
-        .btn-sm { background:#0b1a33; color:white; padding:5px 12px; text-decoration:none; border-radius:4px; font-size:13px; display:inline-block; margin:2px; }
-        .status { padding:4px 8px; border-radius:4px; font-size:12px; }
+        .btn-sm { background:#0b1a33; color:white; padding:5px 12px; text-decoration:none; border-radius:4px; font-size:13px; display:inline-block; }
+        .status { padding:4px 8px; border-radius:4px; font-size:12px; display:inline-block; }
         .status-pending { background:#fff3cd; color:#856404; }
         .status-confirmed { background:#d4edda; color:#155724; }
         .status-completed { background:#d1ecf1; color:#0c5460; }
@@ -76,9 +76,10 @@ $appointments = $conn->query("
         .empty { text-align:center; padding:40px; color:#5a6f8c; }
         
         .visit-indicator { display:flex; gap:10px; margin-top:5px; }
-        .indicator-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+        .indicator-dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:4px; }
         .dot-green { background:#10b981; }
         .dot-red { background:#ef4444; }
+        .visit-item { display:inline-flex; align-items:center; gap:4px; margin-right:12px; font-size:12px; }
     </style>
 </head>
 <body>
@@ -114,8 +115,8 @@ $appointments = $conn->query("
         
         <!-- Appointments List -->
         <div class="card">
-            <?php if ($appointments->num_rows > 0): ?>
-            <table>
+            <?php if ($appointments && $appointments->num_rows > 0): ?>
+            <table style="width:100%; border-collapse:collapse;">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -133,19 +134,23 @@ $appointments = $conn->query("
                         $has_vaccines = $apt['vaccines_given'] > 0;
                     ?>
                     <tr>
-                        <td><?= date('M d, Y', strtotime($apt['appointment_date'])) ?></td>
-                        <td><?= date('g:i A', strtotime($apt['appointment_time'])) ?></td>
-                        <td><?= htmlspecialchars($apt['first_name'] . ' ' . $apt['last_name']) ?></td>
-                        <td><?= $apt['age_months'] ?> months</td
-                        <td><span class="status status-<?= strtolower($apt['status']) ?>"><?= $apt['status'] ?></span></td
-                        <td class="visit-indicator">
-                            <span><span class="indicator-dot <?= $has_vitals ? 'dot-green' : 'dot-red' ?>"></span> Vitals</span>
-                            <span><span class="indicator-dot <?= $has_vaccines ? 'dot-green' : 'dot-red' ?>"></span> Vaccines</span>
-                        </td
-                        <td class="action-group">
+                        <td style="padding:12px; border-bottom:1px solid #e2e8f0;"><?= date('M d, Y', strtotime($apt['appointment_date'])) ?></td>
+                        <td style="padding:12px; border-bottom:1px solid #e2e8f0;"><?= date('g:i A', strtotime($apt['appointment_time'])) ?></td>
+                        <td style="padding:12px; border-bottom:1px solid #e2e8f0;"><strong><?= htmlspecialchars($apt['first_name'] . ' ' . $apt['last_name']) ?></strong></td>
+                        <td style="padding:12px; border-bottom:1px solid #e2e8f0;"><?= $apt['age_months'] ?> months</td>
+                        <td style="padding:12px; border-bottom:1px solid #e2e8f0;">
+                            <span class="status status-<?= strtolower($apt['status']) ?>"><?= $apt['status'] ?></span>
+                        </td>
+                        <td style="padding:12px; border-bottom:1px solid #e2e8f0;">
+                            <div class="visit-indicator">
+                                <span class="visit-item"><span class="indicator-dot <?= $has_vitals ? 'dot-green' : 'dot-red' ?>"></span> Vitals</span>
+                                <span class="visit-item"><span class="indicator-dot <?= $has_vaccines ? 'dot-green' : 'dot-red' ?>"></span> Vaccines</span>
+                            </div>
+                        </td>
+                        <td style="padding:12px; border-bottom:1px solid #e2e8f0;">
                             <a href="doctor_child_ehr.php?child_id=<?= $apt['child_id'] ?>" class="btn-sm">View EHR</a>
-                        </td
-                    </tr
+                        </td>
+                    </tr>
                     <?php endwhile; ?>
                 </tbody>
             </table>
@@ -159,3 +164,4 @@ $appointments = $conn->query("
 </div>
 </body>
 </html>
+<?php $conn->close(); ?>

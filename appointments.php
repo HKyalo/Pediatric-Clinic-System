@@ -17,6 +17,9 @@
 // SESSION CONFIGURATION
 // ============================================
 
+// Set timezone to ensure correct time comparisons
+date_default_timezone_set('Africa/Nairobi');
+
 // Set session to last 24 hours 
 ini_set('session.cookie_lifetime', 86400); // 24 hours in seconds
 ini_set('session.gc_maxlifetime', 86400);   // 24 hours in seconds
@@ -49,9 +52,33 @@ $selected_child_id = $_SESSION['selected_child_id'] ?? null;
 /**
  * Clinic configuration constants
  */
-define('CLINIC_OPEN_TIME', '07:00'); // Clinic opening time (24hr format)
-define('CLINIC_CLOSE_TIME', '18:00'); // Clinic closing time (24hr format)
+define('CLINIC_OPEN_TIME', '07:00:00'); // Clinic opening time (24hr format with seconds)
+define('CLINIC_CLOSE_TIME', '18:00:00'); // Clinic closing time (24hr format with seconds)
 define('APPOINTMENT_SLOT_MINUTES', 90); // Duration of each appointment slot
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Convert time string to comparable format (seconds since midnight)
+ */
+function timeToSeconds($time) {
+    if (strlen($time) == 5) {
+        $time .= ':00'; // Add seconds if missing
+    }
+    $parts = explode(':', $time);
+    return ($parts[0] * 3600) + ($parts[1] * 60) + ($parts[2] ?? 0);
+}
+
+/**
+ * Check if a time slot is in the future
+ */
+function isFutureSlot($date, $time) {
+    $slot_datetime = strtotime($date . ' ' . $time);
+    $current_datetime = time();
+    return $slot_datetime > $current_datetime;
+}
 
 // ============================================
 // AJAX HANDLER FOR AVAILABLE TIME SLOTS
@@ -61,14 +88,24 @@ define('APPOINTMENT_SLOT_MINUTES', 90); // Duration of each appointment slot
 if (isset($_GET['action']) && $_GET['action'] === 'get_available_slots') {
     header('Content-Type: application/json');
     
-    $selected_doctor_id = $_GET['doctor_id'] ?? 0;
+    $selected_doctor_id = (int)($_GET['doctor_id'] ?? 0);
     $selected_appointment_date = $_GET['appointment_date'] ?? '';
-    $exclude_appointment_id = $_GET['exclude_id'] ?? 0;
+    $exclude_appointment_id = (int)($_GET['exclude_id'] ?? 0);
     
     if (!$selected_doctor_id || !$selected_appointment_date) {
         echo json_encode(['success' => false, 'message' => 'Missing doctor or date']);
         exit();
     }
+    
+    // Validate date format
+    $date_timestamp = strtotime($selected_appointment_date);
+    if (!$date_timestamp) {
+        echo json_encode(['success' => false, 'message' => 'Invalid date format']);
+        exit();
+    }
+    
+    $formatted_date = date('Y-m-d', $date_timestamp);
+    $current_date = date('Y-m-d');
     
     // Dynamically generate time slots based on clinic hours
     $all_time_slots = [];
@@ -80,16 +117,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_available_slots') {
         $all_time_slots[] = date('H:i:s', $slot_start_time);
         $slot_start_time = strtotime("+{$slot_duration_minutes} minutes", $slot_start_time);
     }
-    // After generating $all_time_slots, filter out past times for today
-    $current_date = date('Y-m-d');
-    $current_time = date('H:i:s');
-
-    if ($selected_appointment_date == $current_date) {
-        $all_time_slots = array_filter($all_time_slots, function($slot) use ($current_time) {
-            return $slot >= $current_time;
-    });
-    // Re-index the array
-    $all_time_slots = array_values($all_time_slots);
+    
+    // Filter out past times for today - using timestamp comparison for accuracy
+    if ($formatted_date == $current_date) {
+        $current_timestamp = time();
+        $all_time_slots = array_filter($all_time_slots, function($slot) use ($formatted_date, $current_timestamp) {
+            $slot_timestamp = strtotime($formatted_date . ' ' . $slot);
+            return $slot_timestamp > $current_timestamp;
+        });
+        // Re-index the array
+        $all_time_slots = array_values($all_time_slots);
     }
     
     // Get slots that are already booked
@@ -101,7 +138,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_available_slots') {
         AND status != 'Cancelled'
         AND appointment_id != ?
     ");
-    $booked_slots_query->bind_param("isi", $selected_doctor_id, $selected_appointment_date, $exclude_appointment_id);
+    $booked_slots_query->bind_param("isi", $selected_doctor_id, $formatted_date, $exclude_appointment_id);
     $booked_slots_query->execute();
     $booked_slots_result = $booked_slots_query->get_result();
     
@@ -117,7 +154,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_available_slots') {
         FROM blocked_slots 
         WHERE doctor_id = ? AND block_date = ?
     ");
-    $blocked_slots_query->bind_param("is", $selected_doctor_id, $selected_appointment_date);
+    $blocked_slots_query->bind_param("is", $selected_doctor_id, $formatted_date);
     $blocked_slots_query->execute();
     $blocked_slots_result = $blocked_slots_query->get_result();
     
@@ -246,16 +283,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         if (!$selected_doctor_id || !$appointment_date || !$appointment_time) {
             throw new Exception("Please fill in all required fields.");
         }
-        //verify time is within clinic hours
-        if ($appointment_time < CLINIC_OPEN_TIME || $appointment_time > CLINIC_CLOSE_TIME) {
+        
+        // Convert time to consistent format (add seconds if missing)
+        if (strlen($appointment_time) == 5) {
+            $appointment_time .= ':00';
+        }
+        
+        $clinic_open_seconds = timeToSeconds(CLINIC_OPEN_TIME);
+        $clinic_close_seconds = timeToSeconds(CLINIC_CLOSE_TIME);
+        $appointment_seconds = timeToSeconds($appointment_time);
+        
+        // Verify time is within clinic hours
+        if ($appointment_seconds < $clinic_open_seconds || $appointment_seconds > $clinic_close_seconds) {
             throw new Exception("Please select a time within clinic hours.");
         }
-        //verifying time isn't a past time
-        $current_date = date('Y-m-d');
-        $current_time = date('H:i:s');
-
-        if ($appointment_date == $current_date && $appointment_time < $current_time) {
-            throw new Exception("Cannot book an appointment at a time that has already passed today. Please select a future time.");
+        
+        // STRICT TIME VALIDATION FOR BOOKING - Using timestamp comparison
+        $appointment_timestamp = strtotime($appointment_date . ' ' . $appointment_time);
+        $current_timestamp = time();
+        
+        if (!$appointment_timestamp) {
+            throw new Exception("Invalid appointment date or time.");
+        }
+        
+        if ($appointment_timestamp <= $current_timestamp) {
+            throw new Exception("Cannot book an appointment at a time that has already passed. Please select a future time.");
         }
 
         $verify_child_query = $conn->prepare("
@@ -374,12 +426,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reschedule_appointmen
             throw new Exception("Please fill in all fields to reschedule.");
         }
         
-        //Check if new time is in the past for today's date
-        $current_date = date('Y-m-d');
-        $current_time = date('H:i:s');
+        // Convert time to consistent format
+        if (strlen($new_appointment_time) == 5) {
+            $new_appointment_time .= ':00';
+        }
         
-        if ($new_appointment_date == $current_date && $new_appointment_time < $current_time) {
-            throw new Exception("Cannot reschedule to a time that has already passed today. Please select a future time.");
+        // STRICT TIME VALIDATION FOR RESCHEDULING - Using timestamp comparison
+        $new_timestamp = strtotime($new_appointment_date . ' ' . $new_appointment_time);
+        $current_timestamp = time();
+        
+        if (!$new_timestamp) {
+            throw new Exception("Invalid appointment date or time.");
+        }
+        
+        if ($new_timestamp <= $current_timestamp) {
+            throw new Exception("Cannot reschedule to a time that has already passed. Please select a future time.");
         }
 
         $verify_ownership_query = $conn->prepare("
@@ -873,7 +934,8 @@ if (isset($_GET['rescheduled'])) {
                 <div class="form-row">
                     <label>Appointment Time *</label>
                     <input type="time" name="appointment_time" id="appointmentTime" class="form-control" 
-                           min="<?= CLINIC_OPEN_TIME ?>" max="<?= CLINIC_CLOSE_TIME ?>" 
+                           min="<?= date('H:i', strtotime(CLINIC_OPEN_TIME)) ?>" 
+                           max="<?= date('H:i', strtotime(CLINIC_CLOSE_TIME)) ?>" 
                            step="<?= APPOINTMENT_SLOT_MINUTES * 60 ?>" required readonly style="background:#f8fafd;">
                     <div class="form-hint">
                         Click on an available slot above to select | Clinic hours: <?= date('g:i A', strtotime(CLINIC_OPEN_TIME)) ?> - <?= date('g:i A', strtotime(CLINIC_CLOSE_TIME)) ?>
@@ -914,21 +976,21 @@ if (isset($_GET['rescheduled'])) {
                             $can_modify = false;
 
                             if ($appointment['status'] === 'Pending') {
-                             // Combine date and time to check if appointment is in the future
+                                // Combine date and time to check if appointment is in the future
+                                $appointment_datetime = strtotime($appointment['appointment_date'] . ' ' . $appointment['appointment_time']);
+                                $current_datetime = time();
+    
+                                if ($appointment_datetime > $current_datetime) {
+                                    $can_modify = true;
+                                }
+                            }
+                            $role_class = ($appointment['doctor_role'] ?? 'immunization') == 'specialist' ? 'specialist' : '';
+                            $role_text = ($appointment['doctor_role'] ?? 'immunization') == 'specialist' ? 'Specialist' : 'Immunization';
+    
+                            // Check if appointment is in the past (including time for today)
                             $appointment_datetime = strtotime($appointment['appointment_date'] . ' ' . $appointment['appointment_time']);
                             $current_datetime = time();
-    
-                            if ($appointment_datetime > $current_datetime) {
-                                $can_modify = true;
-                            }
-                        }
-                        $role_class = ($appointment['doctor_role'] ?? 'immunization') == 'specialist' ? 'specialist' : '';
-                        $role_text = ($appointment['doctor_role'] ?? 'immunization') == 'specialist' ? 'Specialist' : 'Immunization';
-    
-                        // Check if appointment is in the past (including time for today)
-                        $appointment_datetime = strtotime($appointment['appointment_date'] . ' ' . $appointment['appointment_time']);
-                        $current_datetime = time();
-                        $is_past = ($appointment_datetime < $current_datetime);
+                            $is_past = ($appointment_datetime < $current_datetime);
 ?>
                             <tr>
                                 <td><?= htmlspecialchars($appointment['child_name']); ?></td>
@@ -1009,7 +1071,8 @@ if (isset($_GET['rescheduled'])) {
             <div class="form-row">
                 <label>New Time *</label>
                 <input type="time" id="new_time" name="new_time" class="form-control" 
-                       min="<?= CLINIC_OPEN_TIME ?>" max="<?= CLINIC_CLOSE_TIME ?>" 
+                       min="<?= date('H:i', strtotime(CLINIC_OPEN_TIME)) ?>" 
+                       max="<?= date('H:i', strtotime(CLINIC_CLOSE_TIME)) ?>" 
                        step="<?= APPOINTMENT_SLOT_MINUTES * 60 ?>" required readonly style="background:#f8fafd;">
                 <div class="form-hint">
                     Click on an available slot above to select | Clinic hours: <?= date('g:i A', strtotime(CLINIC_OPEN_TIME)) ?> - <?= date('g:i A', strtotime(CLINIC_CLOSE_TIME)) ?>

@@ -8,8 +8,19 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'doctor' || $_SES
     exit();
 }
 
+// Set timezone
+date_default_timezone_set('Africa/Nairobi');
+
 $doctor_id = $_SESSION['user_id'];
 $child_id = $_GET['child_id'] ?? 0;
+
+// ============================================
+// HELPER FUNCTION FOR TIME COMPARISON
+// ============================================
+function isFutureSlot($date, $time) {
+    $slot_timestamp = strtotime($date . ' ' . $time);
+    return $slot_timestamp > time();
+}
 
 // ============================================
 // AJAX HANDLER - MUST BE FIRST
@@ -33,14 +44,17 @@ if (isset($_GET['ajax'])) {
         $start = strtotime("+$slot_minutes minutes", $start);
     }
     
+    // STRICT TIME FILTERING - Only future slots using timestamp comparison
     if ($app_date == date('Y-m-d')) {
-        $current_time = date('H:i:s');
-        $all_slots = array_filter($all_slots, function($slot) use ($current_time) {
-            return $slot >= $current_time;
+        $current_timestamp = time();
+        $all_slots = array_filter($all_slots, function($slot) use ($app_date, $current_timestamp) {
+            $slot_timestamp = strtotime($app_date . ' ' . $slot);
+            return $slot_timestamp > $current_timestamp;
         });
         $all_slots = array_values($all_slots);
     }
     
+    // Get booked slots
     $booked = [];
     $booked_query = $conn->prepare("SELECT appointment_time FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND status != 'Cancelled'");
     $booked_query->bind_param("is", $doc_id, $app_date);
@@ -51,6 +65,7 @@ if (isset($_GET['ajax'])) {
     }
     $booked_query->close();
     
+    // Get blocked slots
     $blocked = [];
     $blocked_query = $conn->prepare("SELECT block_time FROM blocked_slots WHERE doctor_id = ? AND block_date = ?");
     $blocked_query->bind_param("is", $doc_id, $app_date);
@@ -90,6 +105,23 @@ $show_booking = false;
 $assigned_specialist = null;
 $selected_specialist_name = '';
 
+// ============================================
+// CHECK IF PARENT IS PRESENT (Active Appointment Today)
+// ============================================
+$has_active_appointment = false;
+$active_appointment_check = $conn->query("
+    SELECT appointment_id 
+    FROM appointments 
+    WHERE child_id = $child_id 
+    AND doctor_id = $doctor_id 
+    AND appointment_date = CURDATE()
+    AND status = 'Pending'
+    AND TIMESTAMP(appointment_date, appointment_time) >= NOW() - INTERVAL 2 HOUR
+    AND TIMESTAMP(appointment_date, appointment_time) <= NOW() + INTERVAL 2 HOUR
+    LIMIT 1
+");
+$has_active_appointment = ($active_appointment_check && $active_appointment_check->num_rows > 0);
+
 // Handle flag submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
     $flag_type = $_POST['flag_type'];
@@ -109,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
             if (!empty($child['guardian_id'])) {
                 $child_name = $child['first_name'] . ' ' . $child['last_name'];
                 $title = ucfirst($flag_type) . ' Concern for ' . $child_name;
-                $message = "During an immunization checkup, our doctor has identified that $child_name needs to be reviewed by a specialist.\n\nReason: $reason";
+                $message = "Our doctor has identified that $child_name needs to be reviewed by a specialist.\n\nReason: $reason";
                 
                 $notif_stmt = $conn->prepare("
                     INSERT INTO notifications (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at) 
@@ -120,11 +152,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_flag'])) {
             }
             
             $conn->commit();
-            $show_booking = true;
-            $assigned_specialist = $assigned_to;
             
-            $spec_query = $conn->query("SELECT full_name FROM doctors WHERE doctor_id = $assigned_to");
-            $selected_specialist_name = $spec_query->fetch_assoc()['full_name'] ?? 'Specialist';
+            // Only show booking option if parent is present (active appointment)
+            if ($has_active_appointment) {
+                $show_booking = true;
+                $assigned_specialist = $assigned_to;
+                
+                $spec_query = $conn->query("SELECT full_name FROM doctors WHERE doctor_id = $assigned_to");
+                $selected_specialist_name = $spec_query->fetch_assoc()['full_name'] ?? 'Specialist';
+            } else {
+                // Parent not present - just redirect with success message
+                header("Location: doctor_immunization_patients.php?flag_sent=1");
+                exit();
+            }
             
         } else {
             throw new Exception("Error");
@@ -142,22 +182,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
     $appointment_time = $_POST['appointment_time'];
     $flag_id = $_POST['flag_id'];
     
-    $check = $conn->prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'Cancelled'");
-    $check->bind_param("iss", $specialist_id, $appointment_date, $appointment_time);
-    $check->execute();
-    
-    if ($check->get_result()->num_rows > 0) {
-        $booking_error = "Time slot already booked. Please choose another.";
+    // STRICT TIME VALIDATION for booking - cannot book past times
+    $appointment_timestamp = strtotime($appointment_date . ' ' . $appointment_time);
+    if ($appointment_timestamp <= time()) {
+        $booking_error = "Cannot book an appointment at a time that has already passed. Please select a future time.";
     } else {
-        $insert = $conn->prepare("INSERT INTO appointments (child_id, doctor_id, appointment_date, appointment_time, status, notes) VALUES (?, ?, ?, ?, 'Pending', ?)");
-        $notes = "Referral from immunization doctor. Flag ID: $flag_id";
-        $insert->bind_param("iisss", $child_id, $specialist_id, $appointment_date, $appointment_time, $notes);
+        $check = $conn->prepare("SELECT appointment_id FROM appointments WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status != 'Cancelled'");
+        $check->bind_param("iss", $specialist_id, $appointment_date, $appointment_time);
+        $check->execute();
         
-        if ($insert->execute()) {
-            $booking_success = "Appointment booked successfully! Parent has been notified.";
-            $show_booking = false;
+        if ($check->get_result()->num_rows > 0) {
+            $booking_error = "Time slot already booked. Please choose another.";
         } else {
-            $booking_error = "Error booking appointment.";
+            $insert = $conn->prepare("INSERT INTO appointments (child_id, doctor_id, appointment_date, appointment_time, status, notes) VALUES (?, ?, ?, ?, 'Pending', ?)");
+            $notes = "Referral from immunization doctor. Flag ID: $flag_id";
+            $insert->bind_param("iisss", $child_id, $specialist_id, $appointment_date, $appointment_time, $notes);
+            
+            if ($insert->execute()) {
+                $booking_success = "Appointment booked successfully! Parent has been notified.";
+                $show_booking = false;
+            } else {
+                $booking_error = "Error booking appointment.";
+            }
         }
     }
 }
@@ -194,6 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         .alert { padding:15px; margin-bottom:20px; border-radius:6px; }
         .alert.success { background:#d4edda; color:#155724; border-left:4px solid #28a745; }
         .alert.error { background:#f8d7da; color:#721c24; border-left:4px solid #dc3545; }
+        .alert.info { background:#d1ecf1; color:#0c5460; border-left:4px solid #17a2b8; }
         
         /* Success Message Box */
         .success-box { 
@@ -307,21 +354,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         <div class="alert error"><?= $flag_error ?></div>
         <?php endif; ?>
         
-        <!-- SUCCESS MESSAGE WITH CHOICES (shown after successful flag) -->
+        <?php if (isset($_GET['flag_sent'])): ?>
+        <div class="alert info">
+            ✓ Flag submitted successfully! Parent has been notified and will book a specialist appointment online.
+        </div>
+        <?php endif; ?>
+        
+        <!-- SUCCESS MESSAGE WITH BOOKING OPTION (ONLY SHOWN WHEN PARENT IS PRESENT) -->
         <?php if ($show_booking && $assigned_specialist && !isset($_POST['book_appointment'])): ?>
         <div class="success-box">
             <h3>✓ Flag Submitted Successfully</h3>
             <p>Parent has been notified that a specialist review is needed.</p>
-            <p><strong>What would you like to do next?</strong></p>
+            <p><strong>Since the parent is present, would you like to book the appointment now?</strong></p>
             
             <div class="option-buttons">
-                <button onclick="showBookingForm()" class="option-btn book">Book Appointment for Parent</button>
-                <a href="doctor_immunization_patients.php" class="option-btn later">Done - Parent Will Book Later</a>
+                <button onclick="showBookingForm()" class="option-btn book">Yes - Book Appointment Now</button>
+                <a href="doctor_immunization_patients.php" class="option-btn later">No - Parent Will Book Later</a>
             </div>
         </div>
         <?php endif; ?>
         
-        <!-- BOOKING FORM (shown when doctor clicks "Book Appointment for Parent") -->
+        <!-- BOOKING FORM (shown when doctor clicks "Book Appointment Now") -->
         <div id="bookingFormContainer" style="display:none;">
             <div class="booking-options">
                 <h3>Book Specialist Appointment</h3>
@@ -369,8 +422,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         <div class="alert error"><?= $booking_error ?></div>
         <?php endif; ?>
         
-        <!-- FLAG FORM (only if not already flagged) -->
-        <?php if (!$show_booking && !isset($booking_success)): ?>
+        <!-- FLAG FORM (only if not already flagged and not booked) -->
+        <?php if (!$show_booking && !isset($booking_success) && !isset($_GET['flag_sent'])): ?>
         <div class="info-box">
             <strong>Flag for Specialist Review</strong>
             <p style="margin-top:5px;">Use this to refer a child to a specialist when you notice growth concerns, developmental delays, or any other issues that need expert review.</p>
@@ -427,7 +480,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
 <script>
 function showBookingForm() {
     document.getElementById('bookingFormContainer').style.display = 'block';
-    // Scroll to the booking form
     document.getElementById('bookingFormContainer').scrollIntoView({ behavior: 'smooth' });
 }
 

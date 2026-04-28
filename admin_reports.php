@@ -668,14 +668,38 @@ new Chart(document.getElementById('registrationChart'), {
     }
 });
 
-// Status Chart
+// Status Chart with meaningful colors
 new Chart(document.getElementById('statusChart'), {
     type: 'doughnut',
     data: {
         labels: [<?= implode(',', array_map(function($l) { return "'$l'"; }, $status_labels)) ?>],
         datasets: [{
             data: [<?= implode(',', $status_counts) ?>],
-            backgroundColor: ['#f59e0b', '#10b981', '#3b82f6', '#ef4444']
+            backgroundColor: <?php 
+                $colors = [];
+                foreach ($status_labels as $status) {
+                    switch (strtolower($status)) {
+                        case 'completed':
+                            $colors[] = '#10b981'; // Green
+                            break;
+                        case 'pending':
+                            $colors[] = '#f59e0b'; // Orange/Yellow
+                            break;
+                        case 'cancelled':
+                            $colors[] = '#6c757d'; // Gray
+                            break;
+                        case 'missed':
+                            $colors[] = '#ef4444'; // Red
+                            break;
+                        case 'confirmed':
+                            $colors[] = '#3b82f6'; // Blue
+                            break;
+                        default:
+                            $colors[] = '#8b5cf6'; // Purple
+                    }
+                }
+                echo '["' . implode('", "', $colors) . '"]';
+            ?>
         }]
     },
     options: {
