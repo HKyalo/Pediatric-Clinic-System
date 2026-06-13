@@ -563,37 +563,40 @@ foreach ($milestone_data as $num => $data) {
             </div>
             
             <div class="section">
-                <div class="section-header">
-                    <h2>Growth History</h2>
-                </div>
-                <?php if ($growth_history->num_rows > 0): ?>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Weight (kg)</th>
-                            <th>Height (cm)</th>
-                            <th>Head (cm)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php 
-                        $growth_history->data_seek(0);
-                        while ($g = $growth_history->fetch_assoc()): 
-                        ?>
-                        <tr>
-                            <tr><?= date('M d, Y', strtotime($g['record_date'])) ?></td>
-                            <td><?= $g['weight_kg'] ?></td>
-                            <td><?= $g['height_cm'] ?></td>
-                            <td><?= $g['head_circumference'] ?? '-' ?></td>
-                        </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-                <?php else: ?>
-                    <p>No growth records yet.</p>
-                <?php endif; ?>
-            </div>
+    <div class="section-header">
+        <h2>Growth History</h2>
+    </div>
+    <?php if ($growth_history->num_rows > 0): ?>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="border: 1px solid #ddd; padding: 10px; background: #0b1a33; color: white;">Date</th>
+                    <th style="border: 1px solid #ddd; padding: 10px; background: #0b1a33; color: white;">Weight (kg)</th>
+                    <th style="border: 1px solid #ddd; padding: 10px; background: #0b1a33; color: white;">Height (cm)</th>
+                    <th style="border: 1px solid #ddd; padding: 10px; background: #0b1a33; color: white;">Head (cm)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php 
+                // Reset the pointer to beginning
+                $growth_history->data_seek(0);
+                while ($g = $growth_history->fetch_assoc()): 
+                ?>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 8px;"><?php echo date('M d, Y', strtotime($g['record_date'])); ?></td>
+                    <td style="border: 1px solid #ddd; padding: 8px;"><?php echo $g['weight_kg']; ?></td>
+                    <td style="border: 1px solid #ddd; padding: 8px;"><?php echo $g['height_cm']; ?></td>
+                    <td style="border: 1px solid #ddd; padding: 8px;"><?php echo $g['head_circumference'] ?? '-'; ?></td>
+                </tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php else: ?>
+        <p>No growth records yet.</p>
+    <?php endif; ?>
+</div>
         </div>
         
         <!-- VACCINES TAB -->

@@ -418,7 +418,7 @@ if ($child_id) {
     <div class="sidebar">
         <div class="sidebar-header">
             <h2>PCASS</h2>
-            <p>Child and Guardian Portal</p>
+            <p>Family Portal</p>
         </div>
         <div class="nav">
             <ul>
