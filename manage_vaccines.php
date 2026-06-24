@@ -7,19 +7,19 @@ session_start();
 require_once __DIR__ . "/config/db.php";
 
 // ============================================
-// SECURITY CHECK
+// SECURITY CHECK- checks a user is logged in as an admin
 // ============================================
 if (!isset($_SESSION['admin_id']) || $_SESSION['user_type'] !== 'admin') {
     header("Location: index.php");
     exit();
 }
 
+//initialising variables for success/error messages
 $message = "";
 $msg_type = "";
 
-// ============================================
-// HANDLE ADD VACCINE
-// ============================================
+// HANDLING ADD VACCINE
+
 if (isset($_POST['add_vaccine'])) {
     $name = $_POST['vaccine_name'];
     $dose_number = $_POST['dose_number'];
@@ -42,9 +42,8 @@ if (isset($_POST['add_vaccine'])) {
     $stmt->close();
 }
 
-// ============================================
-// HANDLE EDIT VACCINE
-// ============================================
+// HANDLING EDIT VACCINE
+
 if (isset($_POST['edit_vaccine'])) {
     $id = $_POST['vaccine_id'];
     $name = $_POST['vaccine_name'];
@@ -68,9 +67,8 @@ if (isset($_POST['edit_vaccine'])) {
     $stmt->close();
 }
 
-// ============================================
-// HANDLE DELETE VACCINE
-// ============================================
+// HANDLING DELETE VACCINE
+
 if (isset($_GET['delete'])) {
     $id = $_GET['delete'];
     
@@ -86,9 +84,9 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// ============================================
+
 // GET ALL VACCINES
-// ============================================
+
 $vaccines = $conn->query("SELECT * FROM vaccines ORDER BY min_age_weeks, vaccine_id");
 
 // Get vaccine for editing
@@ -100,6 +98,7 @@ if (isset($_GET['edit'])) {
 // Stats
 $total = $conn->query("SELECT COUNT(*) as c FROM vaccines")->fetch_assoc()['c'];
 ?>
+
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Strict//EN">
 <html>
 <head>

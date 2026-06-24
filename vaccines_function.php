@@ -5,9 +5,7 @@ ini_set('session.gc_maxlifetime', 86400);   // 24 hours in seconds
 session_set_cookie_params(86400); // Also set cookie params
 // vaccine_functions.php
 
-/**
- * Calculate child's age in weeks from date of birth
- */
+/* Calculate child's age in weeks from date of birth */
 function get_age_in_weeks($dob) {
     $birth = new DateTime($dob);
     $today = new DateTime();
@@ -15,9 +13,7 @@ function get_age_in_weeks($dob) {
     return floor($days / 7);
 }
 
-/**
- * Get all vaccines a child needs (due + overdue)
- */
+/* Get all vaccines a child needs (due + overdue) */
 function get_child_vaccine_status($child_id, $conn) {
     // Get child's DOB
     $child = $conn->query("SELECT date_of_birth FROM children WHERE child_id = $child_id")->fetch_assoc();
@@ -68,9 +64,7 @@ function get_child_vaccine_status($child_id, $conn) {
     return $status;
 }
 
-/**
- * Check if a vaccine can be given (age check + interval check)
- */
+/* Check if a vaccine can be given (age check + interval check) */
 function can_give_vaccine($child_id, $vaccine_id, $conn) {
     // Get child's age
     $child = $conn->query("SELECT date_of_birth FROM children WHERE child_id = $child_id")->fetch_assoc();
@@ -117,9 +111,7 @@ function can_give_vaccine($child_id, $vaccine_id, $conn) {
     return true;
 }
 
-/**
- * Record a vaccine as given
- */
+/* Record a vaccine as given in vaccination_records table */
 function record_vaccine($child_id, $vaccine_id, $doctor_id, $date_given, $batch, $conn) {
     $stmt = $conn->prepare("
         INSERT INTO vaccination_records 

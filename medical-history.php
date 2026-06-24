@@ -47,9 +47,8 @@ $age_years = $dob->diff($today)->y;
 $age_months = $dob->diff($today)->m + ($age_years * 12);
 $age_weeks = floor($dob->diff($today)->days / 7);
 
-// ============================================
 // FETCH MILESTONE DEFINITIONS FROM DATABASE
-// ============================================
+
 $milestone_defs = $conn->query("
     SELECT * FROM milestone_definitions 
     WHERE is_active = 1 
@@ -92,7 +91,7 @@ $visits = $conn->query("
     ORDER BY sr.review_date DESC
 ");
 
-// 2. Vaccinations - Completed
+// 2. Vaccinations - already administered vaccines
 $vaccines = $conn->query("
     SELECT vr.*, v.vaccine_name, v.dose_number, d.full_name AS doctor_name
     FROM vaccination_records vr
@@ -115,12 +114,15 @@ $upcoming_vaccines = [];
 while ($vax = $all_vaccines->fetch_assoc()) {
     $vax_id = $vax['vaccine_id'];
     
+    //skips if already gven
     if (in_array($vax_id, $given_ids)) {
         continue;
     }
     
+    //calculate estimated due date fo vaccines not given-dob+the min age in weeks
     $est_date = date('M d, Y', strtotime($child['date_of_birth'] . " + {$vax['min_age_weeks']} weeks"));
     
+    //determine the status based on the current age
     if ($age_weeks >= $vax['min_age_weeks']) {
         $status = 'overdue';
         $status_text = 'Overdue';

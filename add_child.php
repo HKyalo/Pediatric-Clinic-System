@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_POST['first_name'],
             $_POST['last_name'],
             $_POST['date_of_birth'],
-            $_POST['gender'],
+            $_POST['gender']
         );
         
         if ($insert_query->execute()) {

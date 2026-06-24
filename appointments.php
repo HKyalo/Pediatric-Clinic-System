@@ -80,9 +80,9 @@ function isFutureSlot($date, $time) {
     return $slot_datetime > $current_datetime;
 }
 
-// ============================================
+
 // AJAX HANDLER FOR AVAILABLE TIME SLOTS
-// ============================================
+
 
 // Check if this is an AJAX request for available slots
 if (isset($_GET['action']) && $_GET['action'] === 'get_available_slots') {
@@ -164,7 +164,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_available_slots') {
     }
     $blocked_slots_query->close();
     
-    // Calculate available slots
+    // Calculate available slots(All slots-booked-blocked)
     $available_slots_list = array_diff($all_time_slots, $booked_slots_list, $blocked_slots_list);
     
     // Format slots for display
@@ -375,18 +375,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['book_appointment'])) 
         // ============================================
         // CREATE BOOKING CONFIRMATION NOTIFICATION
         // ============================================
-        
+       
+        //getting child's full name
         $child_name_query = $conn->query("SELECT first_name, last_name FROM children WHERE child_id = $selected_child_id");
         $child_name_data = $child_name_query->fetch_assoc();
         $child_full_name = $child_name_data['first_name'] . ' ' . $child_name_data['last_name'];
         
+        //getting doctor's full name
         $doctor_name_query = $conn->query("SELECT full_name FROM doctors WHERE doctor_id = $selected_doctor_id");
         $doctor_name_data = $doctor_name_query->fetch_assoc();
         $doctor_full_name = $doctor_name_data['full_name'];
         
+        //create the notification message
         $confirm_title = "Appointment Confirmed";
         $confirm_message = "$child_full_name has an appointment with Dr. $doctor_full_name on " . date('l, F j, Y', strtotime($appointment_date)) . " at " . date('g:i A', strtotime($appointment_time)) . ".";
         
+        //insert into notifications table
         $booking_notification = $conn->prepare("
             INSERT INTO notifications (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at) 
             VALUES (?, ?, 'appointment_confirmation', ?, ?, ?, 0, NOW())
@@ -536,9 +540,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reschedule_appointmen
         $formatted_date = date('l, F j, Y', strtotime($new_appointment_date));
         $formatted_time = date('g:i A', strtotime($new_appointment_time));
         
+        //create the notification message
         $reschedule_title = "Appointment Rescheduled";
         $reschedule_message = "$child_full_name's appointment with Dr. $doctor_full_name has been rescheduled to $formatted_date at $formatted_time.";
         
+        //insert to notifications table
         $reschedule_notification = $conn->prepare("
             INSERT INTO notifications (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at) 
             VALUES (?, ?, 'appointment_rescheduled', ?, ?, ?, 0, NOW())
@@ -609,7 +615,7 @@ if (isset($_GET['cancel']) && is_numeric($_GET['cancel'])) {
         // ============================================
         // CREATE CANCELLATION NOTIFICATION
         // ============================================
-        
+        //get child and doctor names
         $apt_details_query = $conn->prepare("
             SELECT c.first_name, c.last_name, d.full_name as doctor_name 
             FROM appointments a
@@ -625,9 +631,11 @@ if (isset($_GET['cancel']) && is_numeric($_GET['cancel'])) {
         $child_full_name = $apt_details['first_name'] . ' ' . $apt_details['last_name'];
         $doctor_full_name = $apt_details['doctor_name'];
         
+        //create the notification message
         $cancel_title = "Appointment Cancelled";
         $cancel_message = "$child_full_name's appointment with Dr. $doctor_full_name on " . date('l, F j, Y', strtotime($appointment_details['appointment_date'])) . " at " . date('g:i A', strtotime($appointment_details['appointment_time'])) . " has been cancelled.";
         
+        //insert into notifications table
         $cancel_notification = $conn->prepare("
             INSERT INTO notifications (guardian_id, child_id, notification_type, title, message, related_id, is_read, created_at) 
             VALUES (?, ?, 'appointment_cancelled', ?, ?, ?, 0, NOW())

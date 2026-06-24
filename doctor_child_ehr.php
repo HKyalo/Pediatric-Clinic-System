@@ -23,7 +23,7 @@ if (!$child) {
     exit();
 }
 
-// Calculate age
+// Calculate age from DOB
 $dob = new DateTime($child['date_of_birth']);
 $today = new DateTime();
 $age_months = $dob->diff($today)->m + ($dob->diff($today)->y * 12);
@@ -31,9 +31,9 @@ $age_years = floor($age_months / 12);
 $age_remaining_months = $age_months % 12;
 $age_weeks = floor($dob->diff($today)->days / 7);
 
-// ============================================
+
 // EDIT WINDOW: 2 hours before to 2 hours after appointment
-// ============================================
+
 $can_edit = false;
 $today_date = date('Y-m-d');
 $current_appointment_id = null;
@@ -68,9 +68,9 @@ if ($appointment_check && $appointment_check->num_rows > 0) {
     $can_edit = ($can_edit_query && $can_edit_query->num_rows > 0);
 }
 
-// ============================================
+
 // CHECK IF VITALS OR VACCINES RECORDED TODAY
-// ============================================
+
 $has_vitals_today = $conn->query("
     SELECT growth_id FROM growth_records 
     WHERE child_id = $child_id 
@@ -96,9 +96,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_appointment_comp
     $can_edit = false;
 }
 
-// ============================================
+
 // FETCH MILESTONE DEFINITIONS FROM DATABASE
-// ============================================
+
 $milestone_defs = $conn->query("
     SELECT * FROM milestone_definitions 
     WHERE is_active = 1 
@@ -116,9 +116,8 @@ while ($row = $milestone_defs->fetch_assoc()) {
     ];
 }
 
-// ============================================
 // FORM HANDLERS
-// ============================================
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_vitals']) && $can_edit) {
     $weight = $_POST['weight_kg'];
     $height = $_POST['height_cm'];
@@ -208,9 +207,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_teeth']) && $can
     $msg_type = "success";
 }
 
-// ============================================
+
 // FETCH DATA
-// ============================================
+
 $growth = $conn->query("SELECT * FROM growth_records WHERE child_id = $child_id ORDER BY record_date ASC");
 $growth_dates = []; $growth_weights = []; $growth_heights = []; $growth_heads = [];
 while ($g = $growth->fetch_assoc()) {
