@@ -1,4 +1,5 @@
 PCASS: Pediatric Clinic Appointment Scheduling System with EHR Integration 
+
 A web-based clinic system for pediatric healthcare facilities, integrating appointment scheduling, electronic health records (EHR), vaccination tracking, and specialist referrals.
 
 Installation:
